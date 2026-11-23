@@ -1,19 +1,33 @@
 import { z } from 'zod';
 import {
+  getAllowedOfficialAttackAbilities,
+  getAllowedOfficialWeaponAbilities,
+} from './attacks';
+import {
   ABILITY_KEYS,
   DEFAULT_ATTUNEMENT_LIMIT_2014,
   DND5E_CLASSES,
   MAX_OFFICIAL_LEVEL_2014,
   MIN_OFFICIAL_LEVEL_2014,
   SKILL_IDS,
+  getClassEntry,
   getSubclassEntry,
   type AbilityKey,
   type SkillId,
 } from './catalog';
 import type { RollMode } from './dice';
 import {
+  ATTACK_ENTRY_KINDS,
+  HIT_DIE_KEYS,
   createEmptyDnd5e2014Sheet,
+  hitDieSizeToKey,
+  inferHitDiceUsedByDieFromClasses,
+  sumHitDiceUsedByDie,
+  type AttackEntryKind,
+  type Dnd5e2014HitDiceUsedByDie,
   type Dnd5e2014SheetData,
+  type Dnd5e2014SpellcastingSourceOverride,
+  type HitDieKey,
 } from './schema';
 
 export const SPELL_SLOT_KEYS = ['1', '2', '3', '4', '5', '6', '7', '8', '9', 'pact'] as const;
@@ -21,6 +35,7 @@ export type SpellSlotKey = (typeof SPELL_SLOT_KEYS)[number];
 
 const CANONICAL_CLASS_IDS = DND5E_CLASSES.map((c) => c.id);
 const CLASS_ID_VALUES: [string, ...string[]] = ['custom', ...CANONICAL_CLASS_IDS];
+const CLASS_ID_SET = new Set<string>(CLASS_ID_VALUES);
 const rollModeValueSchema = z.enum(['disadvantage', 'normal', 'advantage']);
 
 function nullableTrimmedString(maxLen: number) {
@@ -169,9 +184,13 @@ export const dnd5e2014AttackEntrySchema = z
   .object({
     id: z.string().trim().min(1).max(80),
     inventoryItemId: nullableTrimmedString(80).default(null),
+    kind: z.enum(ATTACK_ENTRY_KINDS).optional(),
+    spellSourceClassId: nullableTrimmedString(80).default(null),
     name: z.string().trim().min(1, 'El nom de l’atac és obligatori.').max(120),
     ability: z.enum(ABILITY_KEYS).nullable().default(null),
-    proficient: z.boolean().default(true),
+    abilityOverride: z.enum(ABILITY_KEYS).nullable().default(null),
+    proficient: z.boolean().default(false),
+    proficientOverride: z.boolean().nullable().default(null),
     bonusOverride: z.number().int().min(-20).max(40).nullable().default(null),
     attackBonus: nullableTrimmedString(40).default(null),
     damage: nullableTrimmedString(80).default(null),
@@ -179,7 +198,35 @@ export const dnd5e2014AttackEntrySchema = z
     range: nullableTrimmedString(80).default(null),
     notes: z.string().max(1000).default(''),
   })
-  .strict();
+  .strict()
+  .superRefine((entry, ctx) => {
+    const resolvedKind = entry.kind ?? (entry.inventoryItemId ? 'weapon_override' : 'special');
+    if (entry.inventoryItemId !== null && resolvedKind !== 'weapon_override') {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['kind'],
+        message: 'Els atacs vinculats a un objecte d’inventari han de tenir kind "weapon_override".',
+      });
+    }
+    if (entry.inventoryItemId === null && resolvedKind === 'weapon_override') {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['inventoryItemId'],
+        message: 'Un atac "weapon_override" ha de referenciar un objecte d’inventari.',
+      });
+    }
+    if (entry.spellSourceClassId !== null && resolvedKind !== 'spell') {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['spellSourceClassId'],
+        message: 'Només els atacs de tipus "spell" poden indicar `spellSourceClassId`.',
+      });
+    }
+  })
+  .transform((entry) => ({
+    ...entry,
+    kind: (entry.kind ?? (entry.inventoryItemId ? 'weapon_override' : 'special')) as AttackEntryKind,
+  }));
 
 export const dnd5e2014InventoryItemSchema = z
   .object({
@@ -197,6 +244,7 @@ export const dnd5e2014InventoryItemSchema = z
     requiresAttunement: z.boolean().default(false),
     attuned: z.boolean().default(false),
     weaponAbility: z.enum(ABILITY_KEYS).nullable().default(null),
+    weaponAbilityOverride: z.enum(ABILITY_KEYS).nullable().default(null),
     weaponProficient: z.boolean().default(false),
     damage: nullableTrimmedString(80).default(null),
     damageType: nullableTrimmedString(60).default(null),
@@ -352,6 +400,40 @@ const resourceUsagePatchRecordSchema = z
     }
   });
 
+const spellcastingSourceOverrideSchema = z
+  .object({
+    abilityOverride: z.enum(ABILITY_KEYS).nullable().optional(),
+    saveDcOverride: z.number().int().min(1).max(40).nullable().optional(),
+    attackBonusOverride: z.number().int().min(-20).max(40).nullable().optional(),
+  })
+  .strict();
+
+function validateClassKeys(rec: Record<string, unknown>, ctx: z.RefinementCtx) {
+  if (Object.keys(rec).length > 20) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: 'Massa overrides de classe de màgia (màxim 20).',
+    });
+  }
+  for (const key of Object.keys(rec)) {
+    if (!CLASS_ID_SET.has(key)) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: [key],
+        message: `Classe "${key}" no reconeguda dins \`sourceOverrides\`.`,
+      });
+    }
+  }
+}
+
+const spellcastingSourceOverridesRecordSchema = z
+  .record(z.string().trim().min(1).max(80), spellcastingSourceOverrideSchema)
+  .superRefine(validateClassKeys);
+
+const spellcastingSourceOverridesPatchRecordSchema = z
+  .record(z.string().trim().min(1).max(80), spellcastingSourceOverrideSchema.nullable())
+  .superRefine(validateClassKeys);
+
 export const dnd5e2014SheetSchema = z
   .object({
     generalInfo: z
@@ -405,6 +487,7 @@ export const dnd5e2014SheetSchema = z
         temporary: z.number().int().min(0).max(9999).nullable(),
         hitDice: nullableTrimmedString(60),
         hitDiceUsed: z.number().int().min(0).max(20),
+        hitDiceUsedByDie: buildFixedKeysNumberMap(HIT_DIE_KEYS, 0, 20).nullable().default({}),
         deathSaves: z
           .object({
             successes: z.number().int().min(0).max(3),
@@ -456,6 +539,7 @@ export const dnd5e2014SheetSchema = z
         abilityOverride: z.enum(ABILITY_KEYS).nullable(),
         saveDcOverride: z.number().int().min(1).max(40).nullable(),
         attackBonusOverride: z.number().int().min(-20).max(40).nullable(),
+        sourceOverrides: spellcastingSourceOverridesRecordSchema.default({}),
         usesSpellbook: z.boolean(),
         notes: z.string().max(4000),
       })
@@ -505,7 +589,7 @@ export const dnd5e2014SheetSchema = z
       }
     }
 
-    // Attunement consistency
+    // Attunement & official weapon ability consistency
     const invById = new Map<string, (typeof sheet.inventory)[number]>();
     let attunedCount = 0;
     for (let i = 0; i < sheet.inventory.length; i++) {
@@ -521,6 +605,19 @@ export const dnd5e2014SheetSchema = z
         }
         attunedCount += 1;
       }
+      if (item.category === 'weapon' && item.weaponAbility !== null) {
+        const allowedWeaponAbilities = getAllowedOfficialWeaponAbilities(
+          item,
+          sheet.raceAndClass.classes
+        );
+        if (!allowedWeaponAbilities.includes(item.weaponAbility)) {
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            path: ['inventory', i, 'weaponAbility'],
+            message: `L’arma "${item.name}" no permet usar "${item.weaponAbility}" oficialment; utilitza \`weaponAbilityOverride\` amb autorització del GM.`,
+          });
+        }
+      }
     }
     const maxAttune = sheet.attunement.limitOverride ?? DEFAULT_ATTUNEMENT_LIMIT_2014;
     if (attunedCount > maxAttune) {
@@ -531,26 +628,97 @@ export const dnd5e2014SheetSchema = z
       });
     }
 
-    // Linked attacks consistency (never duplicate or point to missing/non-weapon inventory items)
+    // Linked & manual attacks consistency (never duplicate, never trust illegal ability scores)
     const seenLinkedItems = new Set<string>();
     for (let i = 0; i < sheet.attacks.length; i++) {
       const atk = sheet.attacks[i];
-      if (!atk.inventoryItemId) continue;
-      if (seenLinkedItems.has(atk.inventoryItemId)) {
+      if (atk.inventoryItemId) {
+        if (seenLinkedItems.has(atk.inventoryItemId)) {
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            path: ['attacks', i, 'inventoryItemId'],
+            message: 'No es pot enllaçar el mateix objecte d’inventari més d’una vegada dins atacs.',
+          });
+        }
+        seenLinkedItems.add(atk.inventoryItemId);
+        const linkedItem = invById.get(atk.inventoryItemId);
+        if (!linkedItem || linkedItem.category !== 'weapon') {
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            path: ['attacks', i, 'inventoryItemId'],
+            message: `L’atac "${atk.name}" referencia una arma inexistent o que no és de categoria arma.`,
+          });
+        }
+      }
+
+      if (atk.kind === 'special' && atk.ability !== null) {
         ctx.addIssue({
           code: z.ZodIssueCode.custom,
-          path: ['attacks', i, 'inventoryItemId'],
-          message: 'No es pot enllaçar el mateix objecte d’inventari més d’una vegada dins atacs.',
+          path: ['attacks', i, 'ability'],
+          message: `Els atacs especials ("${atk.name}") no accepten característica lliure a \`ability\`; utilitza \`abilityOverride\` amb autorització del GM.`,
+        });
+      } else if (atk.kind !== 'gm_custom') {
+        const allowedAtkAbilities = getAllowedOfficialAttackAbilities(
+          atk,
+          invById,
+          sheet.raceAndClass.classes,
+          sheet.spellcasting
+        );
+        if (
+          atk.kind === 'spell' &&
+          atk.spellSourceClassId !== null &&
+          allowedAtkAbilities.length === 0
+        ) {
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            path: ['attacks', i, 'spellSourceClassId'],
+            message: `La classe "${atk.spellSourceClassId}" no disposa de màgia activa per a l’atac "${atk.name}".`,
+          });
+        }
+        if (atk.ability !== null && !allowedAtkAbilities.includes(atk.ability)) {
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            path: ['attacks', i, 'ability'],
+            message: `La característica "${atk.ability}" no és legal oficialment per a l’atac "${atk.name}"; utilitza \`abilityOverride\` amb autorització del GM.`,
+          });
+        }
+      }
+    }
+
+    // Per-die hit dice consistency
+    if (sheet.hitPoints.hitDiceUsedByDie !== null) {
+      const byDieSum = sumHitDiceUsedByDie(sheet.hitPoints.hitDiceUsedByDie);
+      if (byDieSum !== sheet.hitPoints.hitDiceUsed) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ['hitPoints', 'hitDiceUsedByDie'],
+          message: `La suma dels daus de cop gastats per mida (${byDieSum}) no coincideix amb \`hitDiceUsed\` (${sheet.hitPoints.hitDiceUsed}).`,
         });
       }
-      seenLinkedItems.add(atk.inventoryItemId);
-      const linkedItem = invById.get(atk.inventoryItemId);
-      if (!linkedItem || linkedItem.category !== 'weapon') {
-        ctx.addIssue({
-          code: z.ZodIssueCode.custom,
-          path: ['attacks', i, 'inventoryItemId'],
-          message: `L’atac "${atk.name}" referencia una arma inexistent o que no és de categoria arma.`,
-        });
+
+      const poolByKey = new Map<HitDieKey, number>();
+      let allOfficialClasses = sheet.raceAndClass.classes.length > 0;
+      for (const cls of sheet.raceAndClass.classes) {
+        const meta = getClassEntry(cls.classId);
+        if (!meta) {
+          allOfficialClasses = false;
+          break;
+        }
+        const dieKey = hitDieSizeToKey(meta.hitDie);
+        poolByKey.set(dieKey, (poolByKey.get(dieKey) ?? 0) + cls.level);
+      }
+      if (allOfficialClasses) {
+        for (const key of HIT_DIE_KEYS) {
+          const usedVal = sheet.hitPoints.hitDiceUsedByDie[key] ?? 0;
+          const poolVal = poolByKey.get(key) ?? 0;
+          if (usedVal > poolVal) {
+            ctx.addIssue({
+              code: z.ZodIssueCode.custom,
+              path: ['hitPoints', 'hitDiceUsedByDie', key],
+              message: `No es poden marcar ${usedVal} dau(s) ${key} gastats perquè el personatge només té ${poolVal}.`,
+            });
+          }
+        }
       }
     }
 
@@ -682,6 +850,9 @@ export const dnd5e2014SheetPatchSchema = z
         temporary: z.number().int().min(0).max(9999).nullable().optional(),
         hitDice: nullableTrimmedString(60).optional(),
         hitDiceUsed: z.number().int().min(0).max(20).optional(),
+        hitDiceUsedByDie: buildFixedKeysNullableNumberMap(HIT_DIE_KEYS, 0, 20)
+          .nullable()
+          .optional(),
         deathSaves: z
           .object({
             successes: z.number().int().min(0).max(3).optional(),
@@ -740,6 +911,7 @@ export const dnd5e2014SheetPatchSchema = z
         abilityOverride: z.enum(ABILITY_KEYS).nullable().optional(),
         saveDcOverride: z.number().int().min(1).max(40).nullable().optional(),
         attackBonusOverride: z.number().int().min(-20).max(40).nullable().optional(),
+        sourceOverrides: spellcastingSourceOverridesPatchRecordSchema.optional(),
         usesSpellbook: z.boolean().optional(),
         notes: z.string().max(4000).optional(),
       })
@@ -862,6 +1034,49 @@ function applyRollModeMapPatch<TKey extends string>(
   return next;
 }
 
+function applyHitDiceUsedByDiePatch(
+  current: Dnd5e2014HitDiceUsedByDie | null,
+  patch: Partial<Record<HitDieKey, number | null>>
+): Dnd5e2014HitDiceUsedByDie {
+  const next: Dnd5e2014HitDiceUsedByDie = { ...(current ?? {}) };
+  for (const [key, value] of Object.entries(patch)) {
+    if (value === undefined) continue;
+    if (value === null || value <= 0) {
+      delete next[key as HitDieKey];
+    } else if (typeof value === 'number' && Number.isFinite(value)) {
+      next[key as HitDieKey] = Math.floor(value);
+    }
+  }
+  return next;
+}
+
+function applySpellcastingSourceOverridesPatch(
+  current: Record<string, Dnd5e2014SpellcastingSourceOverride>,
+  patch: Record<string, Dnd5e2014SpellcastingSourceOverride | null>
+): Record<string, Dnd5e2014SpellcastingSourceOverride> {
+  const next: Record<string, Dnd5e2014SpellcastingSourceOverride> = structuredClone(current ?? {});
+  for (const [classId, value] of Object.entries(patch)) {
+    if (value === null) {
+      delete next[classId];
+      continue;
+    }
+    const merged: Dnd5e2014SpellcastingSourceOverride = {
+      ...(next[classId] ?? {}),
+      ...value,
+    };
+    const hasAny =
+      (merged.abilityOverride !== undefined && merged.abilityOverride !== null) ||
+      (merged.saveDcOverride !== undefined && merged.saveDcOverride !== null) ||
+      (merged.attackBonusOverride !== undefined && merged.attackBonusOverride !== null);
+    if (hasAny) {
+      next[classId] = merged;
+    } else {
+      delete next[classId];
+    }
+  }
+  return next;
+}
+
 /**
  * Pure deep merge of a validated v2 sheet patch into a normalized v2 sheet object.
  * Preserves untouched fields, allows explicit null deletion inside override/roll-mode maps,
@@ -925,13 +1140,50 @@ export function mergeDnd5e2014SheetPatch(
     next.proficiencies = { ...next.proficiencies, ...patch.proficiencies };
   }
   if (patch.hitPoints) {
+    const {
+      hitDiceUsedByDie: patchByDie,
+      hitDiceUsed: patchUsedScalar,
+      deathSaves: patchDeathSaves,
+      ...restHp
+    } = patch.hitPoints;
+
     next.hitPoints = {
       ...next.hitPoints,
-      ...patch.hitPoints,
-      deathSaves: patch.hitPoints.deathSaves
-        ? { ...next.hitPoints.deathSaves, ...patch.hitPoints.deathSaves }
+      ...restHp,
+      deathSaves: patchDeathSaves
+        ? { ...next.hitPoints.deathSaves, ...patchDeathSaves }
         : next.hitPoints.deathSaves,
     };
+
+    if (patchByDie !== undefined) {
+      if (patchByDie === null) {
+        next.hitPoints.hitDiceUsedByDie = null;
+        if (patchUsedScalar !== undefined) {
+          next.hitPoints.hitDiceUsed = patchUsedScalar;
+        }
+      } else if (patchUsedScalar === 0 && Object.keys(patchByDie).length === 0) {
+        next.hitPoints.hitDiceUsedByDie = {};
+        next.hitPoints.hitDiceUsed = 0;
+      } else {
+        const mergedByDie = applyHitDiceUsedByDiePatch(
+          next.hitPoints.hitDiceUsedByDie,
+          patchByDie as Partial<Record<HitDieKey, number | null>>
+        );
+        next.hitPoints.hitDiceUsedByDie = mergedByDie;
+        next.hitPoints.hitDiceUsed =
+          patchUsedScalar !== undefined ? patchUsedScalar : sumHitDiceUsedByDie(mergedByDie);
+      }
+    } else if (patchUsedScalar !== undefined) {
+      next.hitPoints.hitDiceUsed = patchUsedScalar;
+      if (patchUsedScalar === 0) {
+        next.hitPoints.hitDiceUsedByDie = {};
+      } else if (patchUsedScalar !== base.hitPoints.hitDiceUsed) {
+        next.hitPoints.hitDiceUsedByDie = inferHitDiceUsedByDieFromClasses(
+          patchUsedScalar,
+          next.raceAndClass.classes
+        );
+      }
+    }
   }
   if (patch.armorClass) {
     next.armorClass = { ...next.armorClass, ...patch.armorClass };
@@ -958,7 +1210,18 @@ export function mergeDnd5e2014SheetPatch(
     next.traitsAndFeatures = patch.traitsAndFeatures.map((t) => ({ ...t }));
   }
   if (patch.spellcasting) {
-    next.spellcasting = { ...next.spellcasting, ...patch.spellcasting };
+    const { sourceOverrides: patchSourceOverrides, ...restSpellcasting } = patch.spellcasting;
+    next.spellcasting = {
+      ...next.spellcasting,
+      ...restSpellcasting,
+      sourceOverrides:
+        patchSourceOverrides !== undefined
+          ? applySpellcastingSourceOverridesPatch(
+              next.spellcasting.sourceOverrides,
+              patchSourceOverrides
+            )
+          : next.spellcasting.sourceOverrides,
+    };
   }
   if (patch.spells !== undefined) {
     next.spells = patch.spells.map((s) => ({ ...s }));

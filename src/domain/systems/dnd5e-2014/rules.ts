@@ -21,7 +21,14 @@ import {
 } from './catalog';
 import type { RollMode } from './dice';
 import { computeCharacterResources, type ComputedCharacterResource } from './resources';
-import type { Dnd5e2014SheetData } from './schema';
+import {
+  HIT_DIE_SIZES,
+  hitDieSizeToKey,
+  sumHitDiceUsedByDie,
+  type Dnd5e2014SheetData,
+  type HitDieKey,
+  type HitDieSize,
+} from './schema';
 
 export type SkillProficiencyLevel = 'none' | 'half' | 'proficient' | 'expertise';
 
@@ -172,6 +179,25 @@ export interface ComputedInventorySummary {
   attunement: ComputedAttunementSummary;
 }
 
+export interface ComputedHitDiePoolEntry {
+  dieSize: HitDieSize;
+  dieKey: HitDieKey;
+  total: number;
+  used: number | null;
+  available: number | null;
+  maxSpendableNow: number;
+}
+
+export interface ComputedHitDiceSummary {
+  display: string | null;
+  total: number;
+  used: number;
+  available: number;
+  hasUnallocatedLegacyUsage: boolean;
+  unallocatedUsed: number;
+  byDie: ComputedHitDiePoolEntry[];
+}
+
 export interface ComputedDnd5e2014Snapshot {
   totalLevel: number;
   proficiencyBonus: number;
@@ -197,6 +223,7 @@ export interface ComputedDnd5e2014Snapshot {
     hitDiceDisplay: string | null;
     totalHitDice: number;
     availableHitDice: number;
+    hitDicePool: ComputedHitDiceSummary;
     attacks: ComputedAttack[];
   };
   spellcasting: ComputedSpellcasting | null;
@@ -492,21 +519,27 @@ export function computeSpellcasting(
       continue;
     }
 
-    const effectiveAbility = sheet.spellcasting.abilityOverride ?? resolved.ability;
+    const srcOverride = sheet.spellcasting.sourceOverrides?.[cls.classId];
+    const effectiveAbility =
+      srcOverride?.abilityOverride ?? sheet.spellcasting.abilityOverride ?? resolved.ability;
     const abilityMod = effectiveAbility ? (abilityMods[effectiveAbility] ?? 0) : 0;
 
     const saveDc =
-      sheet.spellcasting.saveDcOverride !== null
-        ? sheet.spellcasting.saveDcOverride
-        : effectiveAbility
-          ? 8 + proficiencyBonus + abilityMod
-          : null;
+      srcOverride?.saveDcOverride !== undefined && srcOverride.saveDcOverride !== null
+        ? srcOverride.saveDcOverride
+        : sheet.spellcasting.saveDcOverride !== null
+          ? sheet.spellcasting.saveDcOverride
+          : effectiveAbility
+            ? 8 + proficiencyBonus + abilityMod
+            : null;
     const attackBonus =
-      sheet.spellcasting.attackBonusOverride !== null
-        ? sheet.spellcasting.attackBonusOverride
-        : effectiveAbility
-          ? proficiencyBonus + abilityMod
-          : null;
+      srcOverride?.attackBonusOverride !== undefined && srcOverride.attackBonusOverride !== null
+        ? srcOverride.attackBonusOverride
+        : sheet.spellcasting.attackBonusOverride !== null
+          ? sheet.spellcasting.attackBonusOverride
+          : effectiveAbility
+            ? proficiencyBonus + abilityMod
+            : null;
 
     sources.push({
       classId: cls.classId,
@@ -607,6 +640,7 @@ export function computeSpellcasting(
     sheet.spellcasting.abilityOverride !== null ||
     sheet.spellcasting.saveDcOverride !== null ||
     sheet.spellcasting.attackBonusOverride !== null ||
+    Object.keys(sheet.spellcasting.sourceOverrides ?? {}).length > 0 ||
     Object.keys(sheet.spellSlotOverrides).length > 0;
 
   if (
@@ -618,20 +652,22 @@ export function computeSpellcasting(
   }
 
   const primarySource = sources.find((s) => s.progression !== 'pact') ?? sources[0];
-  const ability = sheet.spellcasting.abilityOverride ?? primarySource?.ability ?? null;
+  const ability = primarySource?.ability ?? sheet.spellcasting.abilityOverride ?? null;
   const spellMod = ability ? (abilityMods[ability] ?? 0) : 0;
   const saveDc =
-    sheet.spellcasting.saveDcOverride !== null
+    primarySource?.saveDc ??
+    (sheet.spellcasting.saveDcOverride !== null
       ? sheet.spellcasting.saveDcOverride
       : ability
         ? 8 + proficiencyBonus + spellMod
-        : null;
+        : null);
   const attackBonus =
-    sheet.spellcasting.attackBonusOverride !== null
+    primarySource?.attackBonus ??
+    (sheet.spellcasting.attackBonusOverride !== null
       ? sheet.spellcasting.attackBonusOverride
       : ability
         ? proficiencyBonus + spellMod
-        : null;
+        : null);
 
   const slotTotals =
     effectiveCasterLevel > 0
@@ -939,6 +975,69 @@ function buildHitDiceDisplay(sheet: Dnd5e2014SheetData): string | null {
   return parts.length > 0 ? parts.join(' + ') : null;
 }
 
+export function computeHitDiceSummary(
+  sheet: Dnd5e2014SheetData,
+  totalLevel: number
+): ComputedHitDiceSummary {
+  const totalsBySize = new Map<HitDieSize, number>();
+  for (const cls of sheet.raceAndClass.classes) {
+    const meta = getClassEntry(cls.classId);
+    if (meta) {
+      const lvl = Math.min(
+        MAX_OFFICIAL_LEVEL_2014,
+        Math.max(MIN_OFFICIAL_LEVEL_2014, Math.floor(cls.level))
+      );
+      totalsBySize.set(meta.hitDie, (totalsBySize.get(meta.hitDie) ?? 0) + lvl);
+    }
+  }
+
+  const usedByDie = sheet.hitPoints.hitDiceUsedByDie ?? null;
+  const totalUsed =
+    usedByDie !== null
+      ? sumHitDiceUsedByDie(usedByDie)
+      : Math.max(0, Math.floor(sheet.hitPoints.hitDiceUsed ?? 0));
+  const totalAvailable = Math.max(0, totalLevel - totalUsed);
+  const hasUnallocatedLegacyUsage = usedByDie === null && totalUsed > 0;
+
+  const byDie: ComputedHitDiePoolEntry[] = [];
+  for (const dieSize of HIT_DIE_SIZES) {
+    const dieTotal = totalsBySize.get(dieSize);
+    if (!dieTotal) continue;
+    const dieKey = hitDieSizeToKey(dieSize);
+    if (usedByDie !== null) {
+      const used = Math.min(dieTotal, Math.max(0, Math.floor(usedByDie[dieKey] ?? 0)));
+      const available = Math.max(0, dieTotal - used);
+      byDie.push({
+        dieSize,
+        dieKey,
+        total: dieTotal,
+        used,
+        available,
+        maxSpendableNow: available,
+      });
+    } else {
+      byDie.push({
+        dieSize,
+        dieKey,
+        total: dieTotal,
+        used: null,
+        available: null,
+        maxSpendableNow: Math.min(dieTotal, totalAvailable),
+      });
+    }
+  }
+
+  return {
+    display: buildHitDiceDisplay(sheet),
+    total: totalLevel,
+    used: totalUsed,
+    available: totalAvailable,
+    hasUnallocatedLegacyUsage,
+    unallocatedUsed: hasUnallocatedLegacyUsage ? totalUsed : 0,
+    byDie,
+  };
+}
+
 export function computeDnd5e2014Sheet(sheet: Dnd5e2014SheetData): ComputedDnd5e2014Snapshot {
   const totalLevel = calculateTotalLevel(sheet);
   const proficiencyBonus = calculateProficiencyBonus(totalLevel);
@@ -953,10 +1052,10 @@ export function computeDnd5e2014Sheet(sheet: Dnd5e2014SheetData): ComputedDnd5e2
       ? sheet.initiative.override
       : (abilityMods.dex ?? 0) + (sheet.initiative.bonus ?? 0);
 
-  const attacks = computeAttacks(sheet, abilityMods, proficiencyBonus);
-  const availableHitDice = Math.max(0, totalLevel - Math.max(0, sheet.hitPoints.hitDiceUsed));
-
   const spellcasting = computeSpellcasting(sheet, abilityMods, proficiencyBonus);
+  const attacks = computeAttacks(sheet, abilityMods, proficiencyBonus, spellcasting);
+  const hitDicePool = computeHitDiceSummary(sheet, totalLevel);
+
   const resources = computeCharacterResources(sheet, abilityMods, proficiencyBonus);
   const progression = computeProgression(sheet, totalLevel);
 
@@ -992,9 +1091,10 @@ export function computeDnd5e2014Sheet(sheet: Dnd5e2014SheetData): ComputedDnd5e2
     combat: {
       armorClass,
       initiative,
-      hitDiceDisplay: buildHitDiceDisplay(sheet),
-      totalHitDice: totalLevel,
-      availableHitDice,
+      hitDiceDisplay: hitDicePool.display,
+      totalHitDice: hitDicePool.total,
+      availableHitDice: hitDicePool.available,
+      hitDicePool,
       attacks,
     },
     spellcasting,

@@ -1,5 +1,12 @@
-import { getAllowedOfficialWeaponAbilities } from './attacks';
-import type { Dnd5e2014SheetData } from './schema';
+import {
+  getAllowedOfficialAttackAbilities,
+  getAllowedOfficialWeaponAbilities,
+} from './attacks';
+import type {
+  Dnd5e2014AttackEntry,
+  Dnd5e2014SheetData,
+  Dnd5e2014SpellcastingSourceOverride,
+} from './schema';
 import type { Dnd5e2014SheetPatchOutput } from './validation';
 
 /**
@@ -13,6 +20,9 @@ export const PROTECTED_OFFICIAL_CALCULATION_PATHS = [
   'armorClass.override',
   'initiative.override',
   'initiative.bonus',
+  'attacks.ability',
+  'attacks.proficient',
+  'attacks.gmCustom',
   'attacks.bonusOverride',
   'attacks.attackBonus',
   'inventory.weaponProficient',
@@ -21,6 +31,7 @@ export const PROTECTED_OFFICIAL_CALCULATION_PATHS = [
   'spellcasting.abilityOverride',
   'spellcasting.saveDcOverride',
   'spellcasting.attackBonusOverride',
+  'spellcasting.sourceOverrides',
   'spellSlotOverrides',
   'customResources',
 ] as const;
@@ -210,6 +221,99 @@ function normalizedCustomResourcesEqual(
   return true;
 }
 
+function sameAttackEntry(a: Dnd5e2014AttackEntry, b: Dnd5e2014AttackEntry): boolean {
+  return (
+    a.id === b.id &&
+    a.inventoryItemId === b.inventoryItemId &&
+    a.kind === b.kind &&
+    a.spellSourceClassId === b.spellSourceClassId &&
+    a.name === b.name &&
+    a.ability === b.ability &&
+    a.abilityOverride === b.abilityOverride &&
+    a.proficient === b.proficient &&
+    a.proficientOverride === b.proficientOverride &&
+    a.bonusOverride === b.bonusOverride &&
+    a.attackBonus === b.attackBonus &&
+    a.damage === b.damage &&
+    a.damageType === b.damageType &&
+    a.range === b.range &&
+    a.notes === b.notes
+  );
+}
+
+function canonicalAttackProficiencyAllowed(
+  atk: Pick<Dnd5e2014AttackEntry, 'kind'>,
+  allowedOfficialAbilities: readonly string[]
+): boolean {
+  if (atk.kind === 'unarmed') return true;
+  if (atk.kind === 'spell') return allowedOfficialAbilities.length > 0;
+  return false;
+}
+
+function normalizeComparableSourceOverride(
+  val: Dnd5e2014SpellcastingSourceOverride | null | undefined
+): { abilityOverride: string | null; saveDcOverride: number | null; attackBonusOverride: number | null } | null {
+  if (!val) return null;
+  const abilityOverride = val.abilityOverride ?? null;
+  const saveDcOverride = val.saveDcOverride ?? null;
+  const attackBonusOverride = val.attackBonusOverride ?? null;
+  if (abilityOverride === null && saveDcOverride === null && attackBonusOverride === null) {
+    return null;
+  }
+  return { abilityOverride, saveDcOverride, attackBonusOverride };
+}
+
+function sameSourceOverride(
+  prev: Dnd5e2014SpellcastingSourceOverride | undefined,
+  next: Dnd5e2014SpellcastingSourceOverride | null
+): boolean {
+  if (next === null) {
+    return normalizeComparableSourceOverride(prev) === null;
+  }
+  const mergedNext: Dnd5e2014SpellcastingSourceOverride = {
+    abilityOverride:
+      next.abilityOverride !== undefined ? next.abilityOverride : prev?.abilityOverride ?? null,
+    saveDcOverride:
+      next.saveDcOverride !== undefined ? next.saveDcOverride : prev?.saveDcOverride ?? null,
+    attackBonusOverride:
+      next.attackBonusOverride !== undefined
+        ? next.attackBonusOverride
+        : prev?.attackBonusOverride ?? null,
+  };
+  const normPrev = normalizeComparableSourceOverride(prev);
+  const normNext = normalizeComparableSourceOverride(mergedNext);
+  if (!normPrev && !normNext) return true;
+  if (!normPrev || !normNext) return false;
+  return (
+    normPrev.abilityOverride === normNext.abilityOverride &&
+    normPrev.saveDcOverride === normNext.saveDcOverride &&
+    normPrev.attackBonusOverride === normNext.attackBonusOverride
+  );
+}
+
+function resolveResultingSpellcastingConfig(
+  existing: Dnd5e2014SheetData['spellcasting'],
+  patchSc: Dnd5e2014SheetPatchOutput['spellcasting']
+): Pick<Dnd5e2014SheetData['spellcasting'], 'abilityOverride' | 'sourceOverrides'> {
+  const sourceOverrides: Record<string, Dnd5e2014SpellcastingSourceOverride> = structuredClone(
+    existing.sourceOverrides ?? {}
+  );
+  if (patchSc?.sourceOverrides) {
+    for (const [classId, value] of Object.entries(patchSc.sourceOverrides)) {
+      if (value === null) {
+        delete sourceOverrides[classId];
+      } else {
+        sourceOverrides[classId] = { ...(sourceOverrides[classId] ?? {}), ...value };
+      }
+    }
+  }
+  return {
+    abilityOverride:
+      patchSc?.abilityOverride !== undefined ? patchSc.abilityOverride : existing.abilityOverride,
+    sourceOverrides,
+  };
+}
+
 /**
  * Extracts all canonical paths touched by a `sheetPatch` during PATCH.
  * - Any field explicitly marked `gmOnly` is always reported when present in the patch
@@ -349,6 +453,23 @@ export function extractTouchedPathsFromSheetPatch(
   if (patch.attacks !== undefined) {
     touched.add('attacks');
     const existingById = new Map(existingSheet.attacks.map((a) => [a.id, a]));
+    const patchIds = new Set(patch.attacks.map((a) => a.id));
+    const existingInvById = new Map(existingSheet.inventory.map((i) => [i.id, i]));
+    const resultingClasses = patch.raceAndClass?.classes ?? existingSheet.raceAndClass.classes;
+    const resultingInventory = patch.inventory ?? existingSheet.inventory;
+    const resultingInvById = new Map(resultingInventory.map((i) => [i.id, i]));
+    const resultingSpellcasting = resolveResultingSpellcastingConfig(
+      existingSheet.spellcasting,
+      patch.spellcasting
+    );
+
+    // Deleting an existing `gm_custom` entry requires GM / `attacks.gmCustom` permission
+    for (const prev of existingSheet.attacks) {
+      if (prev.kind === 'gm_custom' && !patchIds.has(prev.id)) {
+        touched.add('attacks.gmCustom');
+      }
+    }
+
     for (const atk of patch.attacks) {
       const prev = existingById.get(atk.id);
       if (
@@ -362,6 +483,51 @@ export function extractTouchedPathsFromSheetPatch(
         (prev ? atk.attackBonus !== prev.attackBonus : atk.attackBonus !== null)
       ) {
         touched.add('attacks.attackBonus');
+      }
+
+      if (
+        isGmOnly('attacks.gmCustom') ||
+        (atk.kind === 'gm_custom' && (!prev || prev.kind !== 'gm_custom' || !sameAttackEntry(prev, atk))) ||
+        (prev && prev.kind === 'gm_custom' && atk.kind !== 'gm_custom')
+      ) {
+        touched.add('attacks.gmCustom');
+      }
+
+      const allowedNow = getAllowedOfficialAttackAbilities(
+        atk,
+        resultingInvById,
+        resultingClasses,
+        resultingSpellcasting
+      );
+      const isIllegalAbilityNow =
+        atk.kind !== 'gm_custom' && atk.ability !== null && !allowedNow.includes(atk.ability);
+
+      if (
+        isGmOnly('attacks.ability') ||
+        (prev ? atk.abilityOverride !== prev.abilityOverride : atk.abilityOverride !== null) ||
+        (isIllegalAbilityNow && (!prev || atk.ability !== prev.ability))
+      ) {
+        touched.add('attacks.ability');
+      } else if (prev && prev.kind !== 'gm_custom' && prev.ability !== null) {
+        const allowedPrev = getAllowedOfficialAttackAbilities(
+          prev,
+          existingInvById,
+          existingSheet.raceAndClass.classes,
+          existingSheet.spellcasting
+        );
+        if (!allowedPrev.includes(prev.ability) && atk.ability !== prev.ability) {
+          touched.add('attacks.ability');
+        }
+      }
+
+      const canSelfGrantProf = canonicalAttackProficiencyAllowed(atk, allowedNow);
+      const unauthorizedProficientFlag = !canSelfGrantProf && atk.proficient === true;
+      if (
+        isGmOnly('attacks.proficient') ||
+        (prev ? atk.proficientOverride !== prev.proficientOverride : atk.proficientOverride !== null) ||
+        (unauthorizedProficientFlag && (!prev || atk.proficient !== prev.proficient))
+      ) {
+        touched.add('attacks.proficient');
       }
     }
   }
@@ -386,6 +552,9 @@ export function extractTouchedPathsFromSheetPatch(
 
       if (
         isGmOnly('inventory.weaponAbilityOverride') ||
+        (prev
+          ? item.weaponAbilityOverride !== prev.weaponAbilityOverride
+          : item.weaponAbilityOverride !== null) ||
         (isCustomAbilityNow && (!prev || item.weaponAbility !== prev.weaponAbility))
       ) {
         touched.add('inventory.weaponAbilityOverride');
@@ -445,6 +614,17 @@ export function extractTouchedPathsFromSheetPatch(
         patch.spellcasting.attackBonusOverride !== existingSheet.spellcasting.attackBonusOverride
       ) {
         touched.add('spellcasting.attackBonusOverride');
+      }
+    }
+    if (patch.spellcasting.sourceOverrides !== undefined) {
+      const prevOverrides = existingSheet.spellcasting.sourceOverrides ?? {};
+      const changed =
+        isGmOnly('spellcasting.sourceOverrides') ||
+        Object.entries(patch.spellcasting.sourceOverrides).some(
+          ([classId, val]) => !sameSourceOverride(prevOverrides[classId], val)
+        );
+      if (changed) {
+        touched.add('spellcasting.sourceOverrides');
       }
     }
   }
@@ -527,6 +707,37 @@ export function extractProtectedPathsFromCreationPatch(
   if (patch.attacks?.some((a) => a.attackBonus !== null)) {
     violated.push('attacks.attackBonus');
   }
+  if (patch.attacks?.some((a) => a.kind === 'gm_custom')) {
+    violated.push('attacks.gmCustom');
+  }
+  if (patch.attacks) {
+    const classes = patch.raceAndClass?.classes ?? [];
+    const invById = new Map((patch.inventory ?? []).map((i) => [i.id, i]));
+    const spellConfig = {
+      abilityOverride: patch.spellcasting?.abilityOverride ?? null,
+      sourceOverrides: (patch.spellcasting?.sourceOverrides ?? {}) as Dnd5e2014SheetData['spellcasting']['sourceOverrides'],
+    };
+
+    const hasProtectedAttackAbility = patch.attacks.some((a) => {
+      if (a.abilityOverride !== null) return true;
+      if (a.kind === 'gm_custom' || a.ability === null) return false;
+      const allowed = getAllowedOfficialAttackAbilities(a, invById, classes, spellConfig);
+      return !allowed.includes(a.ability);
+    });
+    if (hasProtectedAttackAbility) {
+      violated.push('attacks.ability');
+    }
+
+    const hasProtectedAttackProficient = patch.attacks.some((a) => {
+      if (a.proficientOverride !== null) return true;
+      if (a.proficient !== true) return false;
+      const allowed = getAllowedOfficialAttackAbilities(a, invById, classes, spellConfig);
+      return !canonicalAttackProficiencyAllowed(a, allowed);
+    });
+    if (hasProtectedAttackProficient) {
+      violated.push('attacks.proficient');
+    }
+  }
   if (patch.inventory?.some((i) => i.weaponProficient === true)) {
     violated.push('inventory.weaponProficient');
   }
@@ -534,8 +745,9 @@ export function extractProtectedPathsFromCreationPatch(
     const classes = patch.raceAndClass?.classes ?? [];
     const hasCustomWeaponAbility = patch.inventory.some(
       (i) =>
-        i.weaponAbility !== null &&
-        !getAllowedOfficialWeaponAbilities(i, classes).includes(i.weaponAbility)
+        i.weaponAbilityOverride !== null ||
+        (i.weaponAbility !== null &&
+          !getAllowedOfficialWeaponAbilities(i, classes).includes(i.weaponAbility))
     );
     if (hasCustomWeaponAbility) {
       violated.push('inventory.weaponAbilityOverride');
@@ -564,6 +776,14 @@ export function extractProtectedPathsFromCreationPatch(
     patch.spellcasting.attackBonusOverride !== null
   ) {
     violated.push('spellcasting.attackBonusOverride');
+  }
+  if (
+    patch.spellcasting?.sourceOverrides &&
+    Object.values(patch.spellcasting.sourceOverrides).some(
+      (v) => normalizeComparableSourceOverride(v) !== null
+    )
+  ) {
+    violated.push('spellcasting.sourceOverrides');
   }
   if (
     patch.spellSlotOverrides &&

@@ -48,6 +48,7 @@ describe('Fase 3B: Extensions del model de dades, atacs, màgia, descansos, prog
         requiresAttunement: false,
         attuned: false,
         weaponAbility: null,
+        weaponAbilityOverride: null,
         weaponProficient: false,
         damage: '1d6+3',
         damageType: 'contundent',
@@ -68,6 +69,7 @@ describe('Fase 3B: Extensions del model de dades, atacs, màgia, descansos, prog
         requiresAttunement: false,
         attuned: false,
         weaponAbility: null, // finesse -> auto-tria millor (+4 DEX > +3 STR)
+        weaponAbilityOverride: null,
         weaponProficient: false,
         damage: '1d8+4',
         damageType: 'perforant',
@@ -88,6 +90,7 @@ describe('Fase 3B: Extensions del model de dades, atacs, màgia, descansos, prog
         requiresAttunement: false,
         attuned: false,
         weaponAbility: null,
+        weaponAbilityOverride: null,
         weaponProficient: false,
         damage: '1d8+4',
         damageType: 'perforant',
@@ -108,6 +111,7 @@ describe('Fase 3B: Extensions del model de dades, atacs, màgia, descansos, prog
         requiresAttunement: false,
         attuned: false,
         weaponAbility: null,
+        weaponAbilityOverride: null,
         weaponProficient: false, // Sense competència en armes marcials ni alabarda
         damage: '1d10+3',
         damageType: 'tallant',
@@ -122,9 +126,13 @@ describe('Fase 3B: Extensions del model de dades, atacs, màgia, descansos, prog
       {
         id: 'atk-link-mace',
         inventoryItemId: 'w-mace',
+        kind: 'weapon_override',
+        spellSourceClassId: null,
         name: 'Maça beneïda',
         ability: null,
-        proficient: true,
+        abilityOverride: null,
+        proficient: false,
+        proficientOverride: null,
         bonusOverride: 9,
         attackBonus: null,
         damage: null,
@@ -135,9 +143,13 @@ describe('Fase 3B: Extensions del model de dades, atacs, màgia, descansos, prog
       {
         id: 'atk-unarmed',
         inventoryItemId: null,
+        kind: 'unarmed',
+        spellSourceClassId: null,
         name: 'Cop desarmat',
         ability: 'str',
+        abilityOverride: null,
         proficient: true,
+        proficientOverride: null,
         bonusOverride: null,
         attackBonus: null,
         damage: '1+3',
@@ -199,6 +211,7 @@ describe('Fase 3B: Extensions del model de dades, atacs, màgia, descansos, prog
         requiresAttunement: false,
         attuned: false,
         weaponAbility: 'dex',
+        weaponAbilityOverride: null,
         weaponProficient: false,
         damage: '1d6+3',
         damageType: 'contundent',
@@ -318,7 +331,8 @@ describe('Fase 3B: Extensions del model de dades, atacs, màgia, descansos, prog
       current: 15,
       temporary: 7,
       hitDice: null,
-      hitDiceUsed: 2, // 5 totals - 2 gastats = 3 disponibles
+      hitDiceUsed: 2, // 5 totals - 2 gastats (1d10 + 1d8) = 3 disponibles
+      hitDiceUsedByDie: { d10: 1, d8: 1 },
       deathSaves: { successes: 2, failures: 1 },
     };
     sheet.spellSlotsUsed = { '1': 1, pact: 2 };
@@ -353,10 +367,15 @@ describe('Fase 3B: Extensions del model de dades, atacs, màgia, descansos, prog
       hitDiceToSpend: [{ dieSize: 10, count: 1, rolls: [6] }],
     });
     expect(shortWithDice.summary.hitDiceSpent).toBe(1);
+    expect(shortWithDice.summary.hitDiceSpentByDie).toEqual({ d10: 1 });
     expect(shortWithDice.summary.hpRestored).toBe(8);
-    expect(shortWithDice.patch.hitPoints).toEqual({ hitDiceUsed: 3, current: 23 });
+    expect(shortWithDice.patch.hitPoints).toEqual({
+      hitDiceUsed: 3,
+      hitDiceUsedByDie: { d10: 2, d8: 1 },
+      current: 23,
+    });
 
-    // No permet gastar daus de mida aliena ni superar la reserva de classe o els disponibles totals
+    // No permet gastar daus de mida aliena ni superar la reserva de classe o els disponibles per mida
     expect(() =>
       buildShortRestPatch(sheet, { hitDiceToSpend: [{ dieSize: 12, count: 1 }] })
     ).toThrow(/no disposa/);
@@ -365,10 +384,7 @@ describe('Fase 3B: Extensions del model de dades, atacs, màgia, descansos, prog
     ).toThrow(/no disposa/);
     expect(() =>
       buildShortRestPatch(sheet, {
-        hitDiceToSpend: [
-          { dieSize: 10, count: 2 },
-          { dieSize: 8, count: 2 },
-        ],
+        hitDiceToSpend: [{ dieSize: 8, count: 2 }],
       })
     ).toThrow(/disponibles/);
 
@@ -379,6 +395,7 @@ describe('Fase 3B: Extensions del model de dades, atacs, màgia, descansos, prog
       temporary: 0,
       deathSaves: { successes: 0, failures: 0 },
       hitDiceUsed: 0, // 2 gastats - min(2, floor(5/2)=2) = 0
+      hitDiceUsedByDie: { d10: 0, d8: 0 },
     });
     expect(longDefault.patch.spellSlotsUsed).toEqual({ '1': 0, pact: 0 });
     expect(longDefault.summary.skippedDawnResourceKeys).toEqual(['custom:c-dawn']);
@@ -529,6 +546,7 @@ describe('Fase 3B: Extensions del model de dades, atacs, màgia, descansos, prog
             requiresAttunement: false,
             attuned: true,
             weaponAbility: null,
+            weaponAbilityOverride: null,
             weaponProficient: false,
             damage: null,
             damageType: null,
@@ -554,6 +572,7 @@ describe('Fase 3B: Extensions del model de dades, atacs, màgia, descansos, prog
         requiresAttunement: true,
         attuned: true,
         weaponAbility: null,
+        weaponAbilityOverride: null,
         weaponProficient: false,
         damage: null,
         damageType: null,
@@ -717,6 +736,592 @@ describe('Fase 3B: Extensions del model de dades, atacs, màgia, descansos, prog
       });
       expect(updatedLegacy.schemaVersion).toBe(2);
       expect(updatedLegacy.computed.savingThrows.find((s) => s.ability === 'int')?.rollMode).toBe('advantage');
+    } finally {
+      await close();
+    }
+  });
+
+  it('impedeix que el motor ni el jugador per PATCH alterin attacks.ability, attacks.proficient o atacs vinculats i distingeix tots els tipus d’atac', async () => {
+    // 1. Defensa en profunditat al domini pur + rebuig Zod si arriben atacs il·legals
+    const exploitSheet = createEmptyDnd5e2014Sheet('Explotador');
+    exploitSheet.raceAndClass.classes = [{ classId: 'fighter', level: 5 }]; // prof +3
+    exploitSheet.abilities = { str: 12, dex: 10, con: 14, int: 10, wis: 10, cha: 18 }; // +1 STR, +4 CHA
+    exploitSheet.proficiencies.weapons = ['Armes senzilles']; // sense competència marcial ni espasa llarga
+    exploitSheet.inventory = [
+      {
+        id: 'w-sword',
+        name: 'Espasa llarga',
+        category: 'weapon',
+        quantity: 1,
+        weight: 3,
+        equipped: true,
+        armorType: null,
+        baseAc: null,
+        acBonus: null,
+        requiresAttunement: false,
+        attuned: false,
+        weaponAbility: null,
+        weaponAbilityOverride: null,
+        weaponProficient: false,
+        damage: '1d8+1',
+        damageType: 'tallant',
+        weaponRange: 'Cos a cos (1,5 m)',
+        weaponProperties: 'Versàtil (1d10)',
+        notes: '',
+      },
+    ];
+    exploitSheet.attacks = [
+      {
+        id: 'atk-bad-link',
+        inventoryItemId: 'w-sword',
+        kind: 'weapon_override',
+        spellSourceClassId: null,
+        name: 'Espasa amb Carisma fals',
+        ability: 'cha',
+        abilityOverride: null,
+        proficient: true,
+        proficientOverride: null,
+        bonusOverride: null,
+        attackBonus: null,
+        damage: null,
+        damageType: null,
+        range: null,
+        notes: '',
+      },
+      {
+        id: 'atk-bad-special',
+        inventoryItemId: null,
+        kind: 'special',
+        spellSourceClassId: null,
+        name: 'Cop especial inflat',
+        ability: 'cha',
+        abilityOverride: null,
+        proficient: true,
+        proficientOverride: null,
+        bonusOverride: null,
+        attackBonus: null,
+        damage: '2d6',
+        damageType: 'força',
+        range: '9 m',
+        notes: '',
+      },
+    ];
+
+    expect(dnd5e2014SheetSchema.safeParse(exploitSheet).success).toBe(false);
+    const defenseSnap = computeDnd5e2014Sheet(exploitSheet);
+    const swordAttack = defenseSnap.combat.attacks.find((a) => a.inventoryItemId === 'w-sword')!;
+    // Mai usa 'cha' ni 'proficient: true' silenciosament: cau a oficial ('str', +1, no proficient)
+    expect(swordAttack.ability).toBe('str');
+    expect(swordAttack.isAbilityOverridden).toBe(false);
+    expect(swordAttack.proficient).toBe(false);
+    expect(swordAttack.proficiencySource).toBe('none');
+    expect(swordAttack.attackBonus).toBe(1);
+
+    const specialDefense = defenseSnap.combat.attacks.find((a) => a.id === 'atk-bad-special')!;
+    expect(specialDefense.ability).toBeNull();
+    expect(specialDefense.proficient).toBe(false);
+    expect(specialDefense.attackBonus).toBeNull();
+
+    // 2. Explotació real per servei / PATCH d'un jugador i excepcions del GM
+    const { db, close } = await createTestDb();
+    try {
+      const admin = await bootstrapAdmin(db);
+      const gm = await createInvitedGm(db, admin.ctx, 'gm.attacks@rol.test', 'GM Atacs');
+      const camp = await createCampaign(db, gm.ctx, { name: 'Bastió', systemId: 'dnd5e-2014' });
+      const inv = await createPlayerInvitation(db, gm.ctx, camp.id);
+      const reg = await acceptPlayerInvitation(db, inv.rawToken, {
+        mode: 'register',
+        email: 'guerrer@rol.test',
+        displayName: 'Bram',
+        password: 'PlayerPassword123!',
+      });
+      const playerCtx = await resolveSession(db, reg.rawToken);
+
+      const fighter = await createCharacterBase(db, playerCtx, camp.id, {
+        name: 'Bram',
+        sheetData: {
+          raceAndClass: { classes: [{ classId: 'fighter', level: 5 }] }, // prof +3
+          abilities: { str: 16, dex: 14, con: 14, int: 10, wis: 10, cha: 18 }, // +3 STR, +2 DEX, +4 CHA
+          proficiencies: { weapons: ['Estoc'] },
+          inventory: [
+            {
+              id: 'w-sword',
+              name: 'Espasa llarga',
+              category: 'weapon',
+              equipped: true,
+              damage: '1d8+3',
+              damageType: 'tallant',
+            },
+            {
+              id: 'w-rapier',
+              name: 'Estoc',
+              category: 'weapon',
+              equipped: true,
+              damage: '1d8+2',
+              damageType: 'perforant',
+              weaponProperties: 'Sutil',
+            },
+          ],
+        },
+      });
+
+      const cheatPatches = [
+        // Atac vinculat a arma amb característica il·legal (CHA)
+        {
+          attacks: [
+            { id: 'x1', inventoryItemId: 'w-sword', kind: 'weapon_override' as const, name: 'Espasa CHA', ability: 'cha' as const },
+          ],
+        },
+        // Atac vinculat intentant concedir competència via `proficient`
+        {
+          attacks: [
+            { id: 'x2', inventoryItemId: 'w-sword', kind: 'weapon_override' as const, name: 'Espasa prof', proficient: true },
+          ],
+        },
+        // Cop desarmat amb DEX sent Guerrer (no Monjo)
+        {
+          attacks: [
+            { id: 'x3', kind: 'unarmed' as const, name: 'Cop desarmat', ability: 'dex' as const },
+          ],
+        },
+        // Atac especial intentant autoatribuir-se competència o característica
+        {
+          attacks: [{ id: 'x4', kind: 'special' as const, name: 'Alè', proficient: true }],
+        },
+        {
+          attacks: [{ id: 'x5', kind: 'special' as const, name: 'Alè', ability: 'cha' as const }],
+        },
+        {
+          attacks: [{ id: 'x6', kind: 'special' as const, name: 'Alè', abilityOverride: 'cha' as const }],
+        },
+        {
+          attacks: [{ id: 'x7', kind: 'special' as const, name: 'Alè', proficientOverride: true }],
+        },
+        // Atac màgic sent Guerrer no-llançador
+        {
+          attacks: [{ id: 'x8', kind: 'spell' as const, name: 'Raig fals', ability: 'cha' as const, proficient: true }],
+        },
+        // Crear atac `gm_custom` des del jugador
+        {
+          attacks: [{ id: 'x9', kind: 'gm_custom' as const, name: 'Espasa divina', ability: 'cha' as const, proficient: true }],
+        },
+      ];
+
+      for (const sheetPatch of cheatPatches) {
+        await expect(
+          updateCharacterBase(db, playerCtx, camp.id, fighter.id, { sheetPatch })
+        ).rejects.toMatchObject({ status: 403, code: 'OFFICIAL_CALCULATION_PROTECTED' });
+      }
+
+      // Jugador pot canviar finesse (Estoc) entre STR (+6) i DEX (+5) lliurement, però no a CHA
+      const currentSnap = await getCampaignCharacter(db, playerCtx, camp.id, fighter.id);
+      const currentSheet = normalizeDnd5e2014Sheet(currentSnap.sheetData, 'Bram');
+      const finesseStr = await updateCharacterBase(db, playerCtx, camp.id, fighter.id, {
+        sheetPatch: {
+          inventory: currentSheet.inventory.map((i) =>
+            i.id === 'w-rapier' ? { ...i, weaponAbility: 'str' } : i
+          ),
+        },
+      });
+      expect(finesseStr.computed.combat.attacks.find((a) => a.inventoryItemId === 'w-rapier')?.ability).toBe('str');
+      expect(finesseStr.computed.combat.attacks.find((a) => a.inventoryItemId === 'w-rapier')?.attackBonus).toBe(6);
+
+      const finesseDex = await updateCharacterBase(db, playerCtx, camp.id, fighter.id, {
+        sheetPatch: {
+          inventory: currentSheet.inventory.map((i) =>
+            i.id === 'w-rapier' ? { ...i, weaponAbility: 'dex' } : i
+          ),
+        },
+      });
+      expect(finesseDex.computed.combat.attacks.find((a) => a.inventoryItemId === 'w-rapier')?.ability).toBe('dex');
+      expect(finesseDex.computed.combat.attacks.find((a) => a.inventoryItemId === 'w-rapier')?.attackBonus).toBe(5);
+
+      await expect(
+        updateCharacterBase(db, playerCtx, camp.id, fighter.id, {
+          sheetPatch: {
+            inventory: currentSheet.inventory.map((i) =>
+              i.id === 'w-rapier' ? { ...i, weaponAbility: 'cha' } : i
+            ),
+          },
+        })
+      ).rejects.toMatchObject({ status: 403, code: 'OFFICIAL_CALCULATION_PROTECTED' });
+
+      // Jugador pot crear atacs manuals legítims: `unarmed` (amb STR i competència oficial), `special` descriptiu i `spell` (en un llançador)
+      const withLegitManual = await updateCharacterBase(db, playerCtx, camp.id, fighter.id, {
+        sheetPatch: {
+          attacks: [
+            { id: 'u1', kind: 'unarmed', name: 'Cop desarmat', ability: 'str', damage: '1+3', damageType: 'contundent' },
+            { id: 'sp1', kind: 'special', name: 'Crit intimidatori', damage: '—', notes: 'Efecte narratiu' },
+          ],
+        },
+      });
+      const unarmedAtk = withLegitManual.computed.combat.attacks.find((a) => a.id === 'u1')!;
+      expect(unarmedAtk.attackKind).toBe('unarmed');
+      expect(unarmedAtk.proficient).toBe(true);
+      expect(unarmedAtk.proficiencySource).toBe('unarmed_official');
+      expect(unarmedAtk.attackBonus).toBe(6); // +3 STR +3 prof
+
+      const specAtk = withLegitManual.computed.combat.attacks.find((a) => a.id === 'sp1')!;
+      expect(specAtk.attackKind).toBe('special');
+      expect(specAtk.proficient).toBe(false);
+      expect(specAtk.attackBonus).toBeNull();
+
+      // Personatge Mag pot afegir atac màgic legítim (calcula INT + competència oficial)
+      const mage = await createCharacterBase(db, playerCtx, camp.id, {
+        name: 'Elara',
+        sheetData: {
+          raceAndClass: { classes: [{ classId: 'wizard', level: 5 }] },
+          abilities: { str: 8, dex: 14, con: 12, int: 18, wis: 10, cha: 10 },
+          attacks: [{ id: 'm1', kind: 'spell', spellSourceClassId: 'wizard', name: 'Raig de foc', damage: '2d10', damageType: 'foc' }],
+        },
+      });
+      const spellAtk = mage.computed.combat.attacks.find((a) => a.id === 'm1')!;
+      expect(spellAtk.attackKind).toBe('spell');
+      expect(spellAtk.ability).toBe('int');
+      expect(spellAtk.proficient).toBe(true);
+      expect(spellAtk.proficiencySource).toBe('spellcasting_official');
+      expect(spellAtk.attackBonus).toBe(7); // +4 INT +3 prof
+
+      // El GM pot concedir excepcions explícites: CHA a l'Espasa llarga + competència + gm_custom
+      const afterGm = await updateCharacterBase(db, gm.ctx, camp.id, fighter.id, {
+        sheetPatch: {
+          inventory: currentSheet.inventory.map((i) =>
+            i.id === 'w-sword'
+              ? { ...i, weaponAbilityOverride: 'cha', weaponProficient: true }
+              : i
+          ),
+          attacks: [
+            { id: 'u1', kind: 'unarmed', name: 'Cop desarmat', ability: 'str', damage: '1+3', damageType: 'contundent' },
+            { id: 'gm1', kind: 'gm_custom', name: 'Raig del pacte ocult', abilityOverride: 'cha', proficientOverride: true, damage: '3d8', damageType: 'radiant' },
+          ],
+        },
+        fieldPermissions: {
+          authorizedOverrideFields: ['attacks.ability'],
+        },
+      });
+      const gmSword = afterGm.computed.combat.attacks.find((a) => a.inventoryItemId === 'w-sword')!;
+      expect(gmSword.ability).toBe('cha');
+      expect(gmSword.isAbilityOverridden).toBe(true);
+      expect(gmSword.proficiencySource).toBe('gm_exception');
+      expect(gmSword.attackBonus).toBe(7); // +4 CHA +3 prof
+
+      const gmCustom = afterGm.computed.combat.attacks.find((a) => a.id === 'gm1')!;
+      expect(gmCustom.attackKind).toBe('gm_custom');
+      expect(gmCustom.attackBonus).toBe(7);
+
+      // Si el GM autoritza `attacks.ability`, el jugador pot ajustar `abilityOverride` en un atac seu, però NO `attacks.proficient` ni `gm_custom`
+      const updatedAuthAbility = await updateCharacterBase(db, playerCtx, camp.id, fighter.id, {
+        sheetPatch: {
+          attacks: [
+            { id: 'u1', kind: 'unarmed', name: 'Cop desarmat', abilityOverride: 'cha', damage: '1+3', damageType: 'contundent' },
+            { id: 'gm1', kind: 'gm_custom', name: 'Raig del pacte ocult', abilityOverride: 'cha', proficientOverride: true, damage: '3d8', damageType: 'radiant' },
+          ],
+        },
+      });
+      expect(updatedAuthAbility.computed.combat.attacks.find((a) => a.id === 'u1')?.ability).toBe('cha');
+
+      await expect(
+        updateCharacterBase(db, playerCtx, camp.id, fighter.id, {
+          sheetPatch: {
+            attacks: [
+              { id: 'u1', kind: 'unarmed', name: 'Cop desarmat', ability: 'str', proficientOverride: false },
+              { id: 'gm1', kind: 'gm_custom', name: 'Raig del pacte ocult', abilityOverride: 'cha', proficientOverride: true, damage: '3d8', damageType: 'radiant' },
+            ],
+          },
+        })
+      ).rejects.toMatchObject({ status: 403, code: 'OFFICIAL_CALCULATION_PROTECTED' });
+    } finally {
+      await close();
+    }
+  });
+
+  it('controla daus de cop per mida (d6, d8, d10, d12) en multiclasse i normalitza fitxes antigues sense inventar dades', async () => {
+    // 1. Multiclasse amb les 4 mides: Guerrer 3 (d10) + Bruixot Pacte 2 (d8) + Bruixot Innat 1 (d6) + Bàrbar 2 (d12) = 8 totals
+    const multi = createEmptyDnd5e2014Sheet('Varian Multi');
+    multi.raceAndClass.classes = [
+      { classId: 'fighter', level: 3 },
+      { classId: 'warlock', level: 2 },
+      { classId: 'sorcerer', level: 1 },
+      { classId: 'barbarian', level: 2 },
+    ];
+    multi.abilities = { str: 16, dex: 12, con: 14, int: 10, wis: 10, cha: 16 }; // +2 CON
+    multi.hitPoints = {
+      max: 70,
+      current: 30,
+      temporary: 0,
+      hitDice: null,
+      hitDiceUsed: 3,
+      hitDiceUsedByDie: { d10: 2, d8: 1 },
+      deathSaves: { successes: 0, failures: 0 },
+    };
+
+    const snapBefore = computeDnd5e2014Sheet(multi);
+    expect(snapBefore.combat.hitDicePool).toMatchObject({
+      display: '3d10 + 2d8 + 1d6 + 2d12',
+      total: 8,
+      used: 3,
+      available: 5,
+      hasUnallocatedLegacyUsage: false,
+      byDie: [
+        { dieSize: 6, dieKey: 'd6', total: 1, used: 0, available: 1 },
+        { dieSize: 8, dieKey: 'd8', total: 2, used: 1, available: 1 },
+        { dieSize: 10, dieKey: 'd10', total: 3, used: 2, available: 1 },
+        { dieSize: 12, dieKey: 'd12', total: 2, used: 0, available: 2 },
+      ],
+    });
+
+    // Descans curt rebutja gastar 2d10 perquè només en queda 1 disponible (tot i que queden 5 daus en total)
+    expect(() =>
+      buildShortRestPatch(multi, { hitDiceToSpend: [{ dieSize: 10, count: 2 }] })
+    ).toThrow(/Només tens 1 dau\(s\) d10 disponibles/);
+
+    // Descans curt gastant 1d6 + 1d12 (tirades 4+2=6 i 8+2=10 => +16 PV)
+    const shortRes = buildShortRestPatch(multi, {
+      hitDiceToSpend: [
+        { dieSize: 6, count: 1, rolls: [4] },
+        { dieSize: 12, count: 1, rolls: [8] },
+      ],
+    });
+    expect(shortRes.summary.hitDiceSpentByDie).toEqual({ d6: 1, d12: 1 });
+    expect(shortRes.summary.hpRestored).toBe(16);
+    expect(shortRes.patch.hitPoints).toEqual({
+      hitDiceUsed: 5,
+      hitDiceUsedByDie: { d10: 2, d8: 1, d6: 1, d12: 1 },
+      current: 46,
+    });
+
+    // Descans llarg sobre els 5 gastats (allowance = floor(8/2) = 4): recupera d12(1), d10(2), d8(1) i deixa d6: 1
+    const afterShort = normalizeDnd5e2014Sheet(
+      { ...multi, hitPoints: { ...multi.hitPoints, ...shortRes.patch.hitPoints } },
+      'Varian Multi'
+    );
+    const longDefault = buildLongRestPatch(afterShort);
+    expect(longDefault.summary.hitDiceRecovered).toBe(4);
+    expect(longDefault.summary.hitDiceRecoveredByDie).toEqual({ d12: 1, d10: 2, d8: 1 });
+    expect(longDefault.patch.hitPoints?.hitDiceUsed).toBe(1);
+    expect(longDefault.patch.hitPoints?.hitDiceUsedByDie).toEqual({ d6: 1, d12: 0, d10: 0, d8: 0 });
+
+    // Selecció explícita de recuperació en descans llarg i validació d'excés
+    const longExplicit = buildLongRestPatch(afterShort, {
+      hitDiceToRecover: { d10: 2, d6: 1, d8: 1 },
+    });
+    expect(longExplicit.summary.hitDiceRecovered).toBe(4);
+    expect(longExplicit.patch.hitPoints?.hitDiceUsedByDie).toEqual({ d12: 1, d10: 0, d6: 0, d8: 0 });
+    expect(() =>
+      buildLongRestPatch(afterShort, { hitDiceToRecover: { d12: 2 } })
+    ).toThrow(/només se n’havien gastat 1/);
+
+    // 2. Normalització i descansos amb fitxes antigues a BD (sense inventar dades multiclasse)
+    const { db, close } = await createTestDb();
+    try {
+      const admin = await bootstrapAdmin(db);
+      const gm = await createInvitedGm(db, admin.ctx, 'gm.hd@rol.test', 'GM HitDice');
+      const camp = await createCampaign(db, gm.ctx, { name: 'Valors', systemId: 'dnd5e-2014' });
+      const inv = await createPlayerInvitation(db, gm.ctx, camp.id);
+      const reg = await acceptPlayerInvitation(db, inv.rawToken, {
+        mode: 'register',
+        email: 'hd.player@rol.test',
+        displayName: 'Nora',
+        password: 'PlayerPassword123!',
+      });
+      const playerCtx = await resolveSession(db, reg.rawToken);
+
+      // Fitxa antiga monoclasse (Clergue 4, hitDiceUsed: 2, sense hitDiceUsedByDie) -> infereix { d8: 2 } sense ambigüitat
+      const [legacySingle] = await db
+        .insert(characters)
+        .values({
+          campaignId: camp.id,
+          memberId: reg.memberId,
+          systemId: 'dnd5e-2014',
+          name: 'Clergue Antic',
+          schemaVersion: 2,
+          sheetData: {
+            generalInfo: { name: 'Clergue Antic' },
+            raceAndClass: { classes: [{ classId: 'cleric', level: 4 }] },
+            hitPoints: { max: 32, current: 20, hitDiceUsed: 2 },
+          },
+          customFields: {},
+          fieldPermissions: {},
+          gmNotes: '',
+        })
+        .returning();
+
+      const loadedSingle = await getCampaignCharacter(db, playerCtx, camp.id, legacySingle.id);
+      expect(loadedSingle.computed.combat.hitDicePool.hasUnallocatedLegacyUsage).toBe(false);
+      expect(loadedSingle.computed.combat.hitDicePool.byDie[0]).toMatchObject({
+        dieSize: 8,
+        total: 4,
+        used: 2,
+        available: 2,
+      });
+
+      // Fitxa antiga multiclasse mides mixtes (Guerrer 3 d10 + Mag 2 d6, hitDiceUsed: 3) -> manté hitDiceUsedByDie: null
+      const [legacyMulti] = await db
+        .insert(characters)
+        .values({
+          campaignId: camp.id,
+          memberId: reg.memberId,
+          systemId: 'dnd5e-2014',
+          name: 'Espasamag Antic',
+          schemaVersion: 2,
+          sheetData: {
+            generalInfo: { name: 'Espasamag Antic' },
+            raceAndClass: {
+              classes: [
+                { classId: 'fighter', level: 3 },
+                { classId: 'wizard', level: 2 },
+              ],
+            },
+            abilities: { str: 14, dex: 12, con: 14, int: 16, wis: 10, cha: 10 },
+            hitPoints: { max: 36, current: 15, hitDiceUsed: 3 },
+          },
+          customFields: {},
+          fieldPermissions: {},
+          gmNotes: '',
+        })
+        .returning();
+
+      const loadedLegacyMulti = await getCampaignCharacter(db, playerCtx, camp.id, legacyMulti.id);
+      expect((loadedLegacyMulti.sheetData.hitPoints as Record<string, unknown>).hitDiceUsedByDie).toBeNull();
+      expect(loadedLegacyMulti.computed.combat.hitDicePool).toMatchObject({
+        total: 5,
+        used: 3,
+        available: 2,
+        hasUnallocatedLegacyUsage: true,
+        unallocatedUsed: 3,
+      });
+
+      // Descans curt gasta 1d10 sense inventar `hitDiceUsedByDie` i persisteix hitDiceUsed: 4
+      const normalizedLegacyMulti = normalizeDnd5e2014Sheet(
+        loadedLegacyMulti.sheetData,
+        'Espasamag Antic'
+      );
+      const legacyShort = buildShortRestPatch(normalizedLegacyMulti, {
+        hitDiceToSpend: [{ dieSize: 10, count: 1, rolls: [7] }],
+      });
+      const afterShortDb = await updateCharacterBase(db, playerCtx, camp.id, legacyMulti.id, {
+        sheetPatch: legacyShort.patch,
+      });
+      expect((afterShortDb.sheetData.hitPoints as Record<string, unknown>).hitDiceUsed).toBe(4);
+      expect((afterShortDb.sheetData.hitPoints as Record<string, unknown>).hitDiceUsedByDie).toBeNull();
+
+      // Dos descansos llargs (allowance = floor(5/2) = 2 cadascun): 4 -> 2 (encara null) -> 0 (gradua a {})
+      const sheetAfterShort = normalizeDnd5e2014Sheet(afterShortDb.sheetData, 'Espasamag Antic');
+      const long1 = buildLongRestPatch(sheetAfterShort);
+      const afterLong1Db = await updateCharacterBase(db, playerCtx, camp.id, legacyMulti.id, {
+        sheetPatch: long1.patch,
+      });
+      expect((afterLong1Db.sheetData.hitPoints as Record<string, unknown>).hitDiceUsed).toBe(2);
+      expect((afterLong1Db.sheetData.hitPoints as Record<string, unknown>).hitDiceUsedByDie).toBeNull();
+
+      const sheetAfterLong1 = normalizeDnd5e2014Sheet(afterLong1Db.sheetData, 'Espasamag Antic');
+      const long2 = buildLongRestPatch(sheetAfterLong1);
+      const afterLong2Db = await updateCharacterBase(db, playerCtx, camp.id, legacyMulti.id, {
+        sheetPatch: long2.patch,
+      });
+      expect((afterLong2Db.sheetData.hitPoints as Record<string, unknown>).hitDiceUsed).toBe(0);
+      expect((afterLong2Db.sheetData.hitPoints as Record<string, unknown>).hitDiceUsedByDie).toEqual({});
+    } finally {
+      await close();
+    }
+  });
+
+  it('suporta overrides de màgia per classe en multiclasse amb retrocompatibilitat global i protecció del servidor', async () => {
+    const { db, close } = await createTestDb();
+    try {
+      const admin = await bootstrapAdmin(db);
+      const gm = await createInvitedGm(db, admin.ctx, 'gm.sc@rol.test', 'GM Màgia');
+      const camp = await createCampaign(db, gm.ctx, { name: 'Arcànum', systemId: 'dnd5e-2014' });
+      const inv = await createPlayerInvitation(db, gm.ctx, camp.id);
+      const reg = await acceptPlayerInvitation(db, inv.rawToken, {
+        mode: 'register',
+        email: 'teurg@rol.test',
+        displayName: 'Alara',
+        password: 'PlayerPassword123!',
+      });
+      const playerCtx = await resolveSession(db, reg.rawToken);
+
+      // Un jugador no pot definir `spellcasting.sourceOverrides` en creació ni en PATCH
+      await expect(
+        createCharacterBase(db, playerCtx, camp.id, {
+          name: 'Trampós SourceOverride',
+          sheetData: {
+            raceAndClass: { classes: [{ classId: 'cleric', level: 3 }] },
+            spellcasting: { sourceOverrides: { cleric: { saveDcOverride: 20 } } },
+          },
+        })
+      ).rejects.toMatchObject({ status: 403, code: 'OFFICIAL_CALCULATION_PROTECTED' });
+
+      const multiCaster = await createCharacterBase(db, playerCtx, camp.id, {
+        name: 'Alara',
+        sheetData: {
+          raceAndClass: {
+            classes: [
+              { classId: 'cleric', level: 3 },
+              { classId: 'wizard', level: 2 },
+            ],
+          },
+          abilities: { str: 10, dex: 12, con: 14, int: 18, wis: 14, cha: 16 }, // +4 INT, +2 WIS, +3 CHA, prof +3
+          attacks: [
+            { id: 'sp-cleric', kind: 'spell', spellSourceClassId: 'cleric', name: 'Flama sagrada / Guiatge', damage: '4d6', damageType: 'radiant' },
+            { id: 'sp-wizard', kind: 'spell', spellSourceClassId: 'wizard', name: 'Raig de gel', damage: '2d8', damageType: 'fred' },
+          ],
+        },
+      });
+
+      await expect(
+        updateCharacterBase(db, playerCtx, camp.id, multiCaster.id, {
+          sheetPatch: {
+            spellcasting: { sourceOverrides: { wizard: { attackBonusOverride: 15 } } },
+          },
+        })
+      ).rejects.toMatchObject({ status: 403, code: 'OFFICIAL_CALCULATION_PROTECTED' });
+
+      // El GM aplica override específic NOMÉS a Clergue (CHA + CD 17 + atac +9); el Mag conserva INT oficial
+      const gmOverridden = await updateCharacterBase(db, gm.ctx, camp.id, multiCaster.id, {
+        sheetPatch: {
+          spellcasting: {
+            sourceOverrides: {
+              cleric: { abilityOverride: 'cha', saveDcOverride: 17, attackBonusOverride: 9 },
+            },
+          },
+        },
+      });
+
+      const clericSrc = gmOverridden.computed.spellcasting!.sources.find((s) => s.classId === 'cleric')!;
+      const wizardSrc = gmOverridden.computed.spellcasting!.sources.find((s) => s.classId === 'wizard')!;
+
+      expect(clericSrc.ability).toBe('cha');
+      expect(clericSrc.saveDc).toBe(17);
+      expect(clericSrc.attackBonus).toBe(9);
+      expect(clericSrc.preparedLimit).toBe(6); // +3 CHA + 3 nivells de clergue
+
+      expect(wizardSrc.ability).toBe('int');
+      expect(wizardSrc.saveDc).toBe(15); // 8 + 3 prof + 4 INT
+      expect(wizardSrc.attackBonus).toBe(7); // 3 prof + 4 INT
+      expect(wizardSrc.preparedLimit).toBe(6); // +4 INT + 2 nivells de mag
+
+      expect(gmOverridden.computed.combat.attacks.find((a) => a.id === 'sp-cleric')).toMatchObject({
+        ability: 'cha',
+        attackBonus: 9,
+      });
+      expect(gmOverridden.computed.combat.attacks.find((a) => a.id === 'sp-wizard')).toMatchObject({
+        ability: 'int',
+        attackBonus: 7,
+      });
+
+      // Retrocompatibilitat: un override global sense `sourceOverrides` continua aplicant-se a totes les fonts
+      const globalFallback = await updateCharacterBase(db, gm.ctx, camp.id, multiCaster.id, {
+        sheetPatch: {
+          spellcasting: {
+            abilityOverride: 'cha',
+            sourceOverrides: { cleric: null },
+          },
+        },
+      });
+      expect(globalFallback.computed.spellcasting?.sources.every((s) => s.ability === 'cha')).toBe(
+        true
+      );
     } finally {
       await close();
     }

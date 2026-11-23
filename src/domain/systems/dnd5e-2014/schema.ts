@@ -4,6 +4,8 @@ import {
   DND5E_SKILLS,
   MAX_OFFICIAL_LEVEL_2014,
   MIN_OFFICIAL_LEVEL_2014,
+  getClassEntry,
+  normalizeMatchText,
   resolveClassId,
   type AbilityKey,
   type SkillId,
@@ -13,6 +15,40 @@ import type { RollMode } from './dice';
 export type Dnd5e2014AbilityScores = Record<AbilityKey, number | null>;
 
 export type ResourceRecovery = 'short_rest' | 'long_rest' | 'dawn' | 'other';
+
+export const HIT_DIE_SIZES = [6, 8, 10, 12] as const;
+export type HitDieSize = (typeof HIT_DIE_SIZES)[number];
+export const HIT_DIE_KEYS = ['d6', 'd8', 'd10', 'd12'] as const;
+export type HitDieKey = (typeof HIT_DIE_KEYS)[number];
+export type Dnd5e2014HitDiceUsedByDie = Partial<Record<HitDieKey, number>>;
+
+export function hitDieSizeToKey(size: HitDieSize): HitDieKey {
+  switch (size) {
+    case 6:
+      return 'd6';
+    case 8:
+      return 'd8';
+    case 10:
+      return 'd10';
+    case 12:
+      return 'd12';
+  }
+}
+
+export const ATTACK_ENTRY_KINDS = [
+  'weapon_override',
+  'unarmed',
+  'spell',
+  'special',
+  'gm_custom',
+] as const;
+export type AttackEntryKind = (typeof ATTACK_ENTRY_KINDS)[number];
+
+export interface Dnd5e2014SpellcastingSourceOverride {
+  abilityOverride?: AbilityKey | null;
+  saveDcOverride?: number | null;
+  attackBonusOverride?: number | null;
+}
 
 export type InventoryCategory =
   | 'weapon'
@@ -37,9 +73,13 @@ export interface Dnd5e2014ClassEntry {
 export interface Dnd5e2014AttackEntry {
   id: string;
   inventoryItemId: string | null;
+  kind: AttackEntryKind;
+  spellSourceClassId: string | null;
   name: string;
   ability: AbilityKey | null;
+  abilityOverride: AbilityKey | null;
   proficient: boolean;
+  proficientOverride: boolean | null;
   bonusOverride: number | null;
   attackBonus: string | null;
   damage: string | null;
@@ -61,6 +101,7 @@ export interface Dnd5e2014InventoryItem {
   requiresAttunement: boolean;
   attuned: boolean;
   weaponAbility: AbilityKey | null;
+  weaponAbilityOverride: AbilityKey | null;
   weaponProficient: boolean;
   damage: string | null;
   damageType: string | null;
@@ -174,6 +215,7 @@ export interface Dnd5e2014SheetData extends Record<string, unknown> {
     temporary: number | null;
     hitDice: string | null;
     hitDiceUsed: number;
+    hitDiceUsedByDie: Dnd5e2014HitDiceUsedByDie | null;
     deathSaves: {
       successes: number;
       failures: number;
@@ -211,6 +253,7 @@ export interface Dnd5e2014SheetData extends Record<string, unknown> {
     abilityOverride: AbilityKey | null;
     saveDcOverride: number | null;
     attackBonusOverride: number | null;
+    sourceOverrides: Record<string, Dnd5e2014SpellcastingSourceOverride>;
     usesSpellbook: boolean;
     notes: string;
   };
@@ -308,6 +351,7 @@ export function createEmptyDnd5e2014Sheet(characterName: string): Dnd5e2014Sheet
       temporary: null,
       hitDice: null,
       hitDiceUsed: 0,
+      hitDiceUsedByDie: {},
       deathSaves: {
         successes: 0,
         failures: 0,
@@ -345,6 +389,7 @@ export function createEmptyDnd5e2014Sheet(characterName: string): Dnd5e2014Sheet
       abilityOverride: null,
       saveDcOverride: null,
       attackBonusOverride: null,
+      sourceOverrides: {},
       usesSpellbook: false,
       notes: '',
     },
@@ -418,6 +463,134 @@ const VALID_SPELL_SOURCE_SET = new Set<string>([
   'item',
   'custom',
 ]);
+
+const VALID_ATTACK_KIND_SET = new Set<string>(ATTACK_ENTRY_KINDS);
+const VALID_HIT_DIE_KEY_SET = new Set<string>(HIT_DIE_KEYS);
+
+export function sumHitDiceUsedByDie(
+  byDie: Dnd5e2014HitDiceUsedByDie | null | undefined
+): number {
+  if (!byDie) return 0;
+  let total = 0;
+  for (const key of HIT_DIE_KEYS) {
+    const val = byDie[key];
+    if (typeof val === 'number' && Number.isFinite(val) && val > 0) {
+      total += Math.floor(val);
+    }
+  }
+  return total;
+}
+
+/**
+ * Infers per-die spent hit dice ONLY when unambiguous (zero spent or all classes share one
+ * single official hit-die size within capacity). Never invents missing multiclass die splits.
+ */
+export function inferHitDiceUsedByDieFromClasses(
+  hitDiceUsed: number,
+  classes: readonly Dnd5e2014ClassEntry[]
+): Dnd5e2014HitDiceUsedByDie | null {
+  const safeUsed = Math.max(0, Math.floor(hitDiceUsed));
+  if (safeUsed === 0) {
+    return {};
+  }
+  if (classes.length === 0) {
+    return null;
+  }
+
+  let soleDieSize: HitDieSize | null = null;
+  let totalForSole = 0;
+
+  for (const cls of classes) {
+    const meta = getClassEntry(cls.classId);
+    if (!meta) {
+      return null;
+    }
+    if (soleDieSize === null) {
+      soleDieSize = meta.hitDie;
+    } else if (soleDieSize !== meta.hitDie) {
+      return null;
+    }
+    totalForSole += Math.max(MIN_OFFICIAL_LEVEL_2014, Math.floor(cls.level));
+  }
+
+  if (soleDieSize === null || safeUsed > totalForSole) {
+    return null;
+  }
+
+  return { [hitDieSizeToKey(soleDieSize)]: safeUsed };
+}
+
+function normalizeHitDiceUsedByDie(raw: unknown): Dnd5e2014HitDiceUsedByDie | null {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) {
+    return null;
+  }
+  const obj = raw as Record<string, unknown>;
+  const out: Dnd5e2014HitDiceUsedByDie = {};
+  for (const [key, val] of Object.entries(obj)) {
+    if (!VALID_HIT_DIE_KEY_SET.has(key)) continue;
+    if (typeof val === 'number' && Number.isFinite(val) && val >= 0) {
+      out[key as HitDieKey] = Math.floor(val);
+    }
+  }
+  return out;
+}
+
+function normalizeAttackKind(
+  rawKind: unknown,
+  inventoryItemId: string | null,
+  name: string
+): AttackEntryKind {
+  if (inventoryItemId !== null) {
+    return 'weapon_override';
+  }
+  if (
+    typeof rawKind === 'string' &&
+    VALID_ATTACK_KIND_SET.has(rawKind) &&
+    rawKind !== 'weapon_override'
+  ) {
+    return rawKind as AttackEntryKind;
+  }
+  const norm = normalizeMatchText(name);
+  if (
+    norm === 'cop desarmat' ||
+    norm === 'cops desarmats' ||
+    norm === 'atac desarmat' ||
+    norm === 'unarmed' ||
+    norm === 'unarmed strike' ||
+    norm === 'puny'
+  ) {
+    return 'unarmed';
+  }
+  return 'special';
+}
+
+function normalizeSpellcastingSourceOverrides(
+  raw: unknown
+): Record<string, Dnd5e2014SpellcastingSourceOverride> {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) {
+    return {};
+  }
+  const out: Record<string, Dnd5e2014SpellcastingSourceOverride> = {};
+  for (const [classId, rawEntry] of Object.entries(raw as Record<string, unknown>)) {
+    const cleanId = classId.trim();
+    if (!cleanId) continue;
+    const entry = asObj(rawEntry);
+    const abilityOverride =
+      typeof entry.abilityOverride === 'string' && VALID_ABILITY_SET.has(entry.abilityOverride)
+        ? (entry.abilityOverride as AbilityKey)
+        : null;
+    const saveDcOverride = asNullableNum(entry.saveDcOverride);
+    const attackBonusOverride = asNullableNum(entry.attackBonusOverride);
+    if (abilityOverride !== null || saveDcOverride !== null || attackBonusOverride !== null) {
+      out[cleanId] = {
+        abilityOverride,
+        saveDcOverride,
+        attackBonusOverride,
+      };
+    }
+  }
+  return out;
+}
 
 function normalizeRollModeMap<TKey extends string>(
   raw: unknown,
@@ -530,12 +703,21 @@ export function normalizeDnd5e2014Sheet(raw: unknown, fallbackName: string): Dnd
 
   const hp = asObj(src.hitPoints);
   const ds = asObj(hp.deathSaves);
+  const rawHitDiceUsed = Math.max(0, Math.floor(asNum(hp.hitDiceUsed, 0)));
+  const normalizedByDie =
+    hp.hitDiceUsedByDie !== undefined && hp.hitDiceUsedByDie !== null
+      ? normalizeHitDiceUsedByDie(hp.hitDiceUsedByDie)
+      : inferHitDiceUsedByDieFromClasses(rawHitDiceUsed, base.raceAndClass.classes);
+  const resolvedHitDiceUsed =
+    normalizedByDie !== null ? sumHitDiceUsedByDie(normalizedByDie) : rawHitDiceUsed;
+
   base.hitPoints = {
     max: asNullableNum(hp.max),
     current: asNullableNum(hp.current),
     temporary: asNullableNum(hp.temporary),
     hitDice: asNullableStr(hp.hitDice),
-    hitDiceUsed: Math.max(0, Math.floor(asNum(hp.hitDiceUsed, 0))),
+    hitDiceUsed: resolvedHitDiceUsed,
+    hitDiceUsedByDie: normalizedByDie,
     deathSaves: {
       successes: Math.min(3, Math.max(0, Math.floor(asNum(ds.successes, 0)))),
       failures: Math.min(3, Math.max(0, Math.floor(asNum(ds.failures, 0)))),
@@ -567,16 +749,27 @@ export function normalizeDnd5e2014Sheet(raw: unknown, fallbackName: string): Dnd
   if (Array.isArray(src.attacks)) {
     base.attacks = src.attacks.map((rawAtk, idx) => {
       const a = asObj(rawAtk);
+      const inventoryItemId = asNullableStr(a.inventoryItemId);
+      const name = asStr(a.name);
       const ab =
         typeof a.ability === 'string' && VALID_ABILITY_SET.has(a.ability)
           ? (a.ability as AbilityKey)
           : null;
+      const abOverride =
+        typeof a.abilityOverride === 'string' && VALID_ABILITY_SET.has(a.abilityOverride)
+          ? (a.abilityOverride as AbilityKey)
+          : null;
       return {
         id: asStr(a.id, `atk-${idx + 1}`),
-        inventoryItemId: asNullableStr(a.inventoryItemId),
-        name: asStr(a.name),
+        inventoryItemId,
+        kind: normalizeAttackKind(a.kind, inventoryItemId, name),
+        spellSourceClassId: asNullableStr(a.spellSourceClassId),
+        name,
         ability: ab,
-        proficient: asBool(a.proficient, true),
+        abilityOverride: abOverride,
+        proficient: asBool(a.proficient, false),
+        proficientOverride:
+          typeof a.proficientOverride === 'boolean' ? a.proficientOverride : null,
         bonusOverride: asNullableNum(a.bonusOverride),
         attackBonus: asNullableStr(a.attackBonus),
         damage: asNullableStr(a.damage),
@@ -595,6 +788,11 @@ export function normalizeDnd5e2014Sheet(raw: unknown, fallbackName: string): Dnd
       const wAb =
         typeof item.weaponAbility === 'string' && VALID_ABILITY_SET.has(item.weaponAbility)
           ? (item.weaponAbility as AbilityKey)
+          : null;
+      const wAbOverride =
+        typeof item.weaponAbilityOverride === 'string' &&
+        VALID_ABILITY_SET.has(item.weaponAbilityOverride)
+          ? (item.weaponAbilityOverride as AbilityKey)
           : null;
       const requiresAttunement = asBool(item.requiresAttunement, false);
       return {
@@ -619,6 +817,7 @@ export function normalizeDnd5e2014Sheet(raw: unknown, fallbackName: string): Dnd
         requiresAttunement,
         attuned: requiresAttunement ? asBool(item.attuned, false) : false,
         weaponAbility: wAb,
+        weaponAbilityOverride: wAbOverride,
         weaponProficient: asBool(item.weaponProficient, false),
         damage: asNullableStr(item.damage),
         damageType: asNullableStr(item.damageType),
@@ -665,6 +864,7 @@ export function normalizeDnd5e2014Sheet(raw: unknown, fallbackName: string): Dnd
         : null,
     saveDcOverride: asNullableNum(sc.saveDcOverride),
     attackBonusOverride: asNullableNum(sc.attackBonusOverride),
+    sourceOverrides: normalizeSpellcastingSourceOverrides(sc.sourceOverrides),
     usesSpellbook: asBool(sc.usesSpellbook, false),
     notes: asStr(sc.notes),
   };
