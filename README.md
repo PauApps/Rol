@@ -53,7 +53,14 @@ Plataforma web (PWA) en català per ajudar els Directors de Joc (**GM**) a organ
 | `npm.cmd run typecheck` | Comprova els tipus amb `tsc --noEmit` |
 | `npm.cmd test` | Executa les proves d’integració i seguretat amb Vitest + PGlite |
 | `npm.cmd run db:generate` | Genera migracions SQL a `drizzle/` des de `src/db/schema.ts` |
-| `npm.cmd run db:seed` | Executa les migracions i la llavor inicial de sistemes i administrador |
+| `npm.cmd run db:migrate` | Aplica migracions SQL amb bloqueig transaccional i executa la llavor inicial |
+| `npm.cmd run db:seed` | Àlies de `db:migrate` per inicialitzar la BD |
+
+## Desplegament a Vercel + Neon
+
+El fitxer [vercel.json](./vercel.json) executa `npm run db:migrate && npm run build` com a comanda de compilació. Això aplica les migracions pendents de `drizzle/` una sola vegada per desplegament (amb `pg_advisory_xact_lock`, prioritzant `DATABASE_URL_UNPOOLED` si existeix) i deixa les funcions serverless de runtime connectades directament a PostgreSQL sense executar DDL durant les peticions.
+
+En producció (`NODE_ENV=production` o `VERCEL=1`), `DATABASE_URL` (`postgres://` / `postgresql://`), `ROL_ADMIN_EMAIL` i `ROL_ADMIN_PASSWORD` són obligatòries i no existeix fallback a PGlite.
 
 ## Documentació del projecte
 

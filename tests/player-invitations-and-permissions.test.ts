@@ -9,7 +9,7 @@ import {
   listCampaignsForActor,
   updateCampaign,
 } from '@/server/services/campaign-service';
-import { createCharacterBase, listCampaignCharacters } from '@/server/services/character-service';
+import { createCharacterBase, getCampaignCharacter, listCampaignCharacters, updateCharacterBase } from '@/server/services/character-service';
 import {
   acceptPlayerInvitation,
   createMemberRecoveryLink,
@@ -138,19 +138,80 @@ describe('Invitacions de jugadors, convidats, recuperació segura i protecció d
         })
       ).rejects.toMatchObject({ status: 403, code: 'CHARACTER_OWNER_FORBIDDEN' });
 
-      // Cada jugador només veu els seus personatges; el GM els veu tots
-      const pimChars = await listCampaignCharacters(db, pimCtx1, camp.id);
-      const elaraChars = await listCampaignCharacters(db, elaraCtx, camp.id);
-      const gmChars = await listCampaignCharacters(db, gm.ctx, camp.id);
-      expect(pimChars.map((c) => c.id)).toEqual([pimChar.id]);
-      expect(elaraChars.map((c) => c.id)).toEqual([elaraChar.id]);
-      expect(gmChars.map((c) => c.id).sort()).toEqual([pimChar.id, elaraChar.id].sort());
+      // Tots els jugadors de la campanya poden consultar tots els personatges del grup,
+      // però només poden editar els propis camps autoritzats
+      const pimList = await listCampaignCharacters(db, pimCtx1, camp.id);
+      const elaraList = await listCampaignCharacters(db, elaraCtx, camp.id);
+      const gmList = await listCampaignCharacters(db, gm.ctx, camp.id);
+      expect(pimList.map((c) => c.id).sort()).toEqual([pimChar.id, elaraChar.id].sort());
+      expect(elaraList.map((c) => c.id).sort()).toEqual([pimChar.id, elaraChar.id].sort());
+      expect(gmList.map((c) => c.id).sort()).toEqual([pimChar.id, elaraChar.id].sort());
 
-      // Dades privades al detall de campanya: el jugador no rep llistes d'invitacions ni membres d'altres jugadors
+      // El GM desa notes privades i marca camps ocults/només-GM sobre la fitxa de Pim
+      await updateCharacterBase(db, gm.ctx, camp.id, pimChar.id, {
+        gmNotes: 'Secret del GM: Pim és descendent d’un llinatge oblidat.',
+        sheetFields: {
+          'generalInfo.appearanceNotes': 'Cicatriu oculta al braç',
+          'background.backstory': 'Va créixer a la vall.',
+        },
+        customFields: { secretTag: 'només-gm', publicBadge: 'Explorador' },
+        fieldPermissions: {
+          playerEditableFields: ['background.backstory'],
+          gmOnlyFields: ['generalInfo.appearanceNotes', 'customFields.secretTag'],
+        },
+      });
+
+      // Tant Pim com Elara poden consultar la fitxa de Pim, però sense gmNotes ni camps gmOnly
+      const pimViewOfSelf = await getCampaignCharacter(db, pimCtx1, camp.id, pimChar.id);
+      const elaraViewOfPim = await getCampaignCharacter(db, elaraCtx, camp.id, pimChar.id);
+      expect('gmNotes' in pimViewOfSelf).toBe(false);
+      expect('gmNotes' in elaraViewOfPim).toBe(false);
+      expect(
+        (pimViewOfSelf.sheetData.generalInfo as Record<string, unknown>).appearanceNotes
+      ).toBeUndefined();
+      expect(
+        (elaraViewOfPim.sheetData.generalInfo as Record<string, unknown>).appearanceNotes
+      ).toBeUndefined();
+      expect(pimViewOfSelf.customFields.secretTag).toBeUndefined();
+      expect(pimViewOfSelf.customFields.publicBadge).toBe('Explorador');
+      expect(pimViewOfSelf.canEdit).toBe(true);
+      expect(elaraViewOfPim.canEdit).toBe(false);
+
+      // El GM veu les notes privades i tots els camps
+      const gmViewOfPim = await getCampaignCharacter(db, gm.ctx, camp.id, pimChar.id);
+      expect(gmViewOfPim.gmNotes).toContain('Secret del GM');
+      expect(
+        (gmViewOfPim.sheetData.generalInfo as Record<string, unknown>).appearanceNotes
+      ).toBe('Cicatriu oculta al braç');
+
+      // Pim pot editar el camp autoritzat (background.backstory), però NO camps bloquejats pel GM ni la fitxa d'Elara
+      const updatedSelf = await updateCharacterBase(db, pimCtx1, camp.id, pimChar.id, {
+        sheetFields: { 'background.backstory': 'Va créixer a la vall i va aprendre música.' },
+      });
+      expect((updatedSelf.sheetData.background as Record<string, unknown>).backstory).toContain(
+        'música'
+      );
+
+      await expect(
+        updateCharacterBase(db, pimCtx1, camp.id, pimChar.id, { name: 'Pim Renomenat' })
+      ).rejects.toMatchObject({ status: 403, code: 'FIELD_EDIT_NOT_AUTHORIZED' });
+
+      await expect(
+        updateCharacterBase(db, pimCtx1, camp.id, pimChar.id, { gmNotes: 'Intento llegir/canviar' })
+      ).rejects.toMatchObject({ status: 403, code: 'GM_ONLY_FIELD_FORBIDDEN' });
+
+      await expect(
+        updateCharacterBase(db, pimCtx1, camp.id, elaraChar.id, { name: 'Sabotatge' })
+      ).rejects.toMatchObject({ status: 403, code: 'CHARACTER_EDIT_FORBIDDEN' });
+
+      // Dades privades al detall de campanya: el jugador no rep llistes d'invitacions, membres ni auditories internes del GM
       const detailForPim = await getCampaignDetail(db, pimCtx1, camp.id);
       expect(detailForPim.canManage).toBe(false);
       expect('invitations' in detailForPim).toBe(false);
       expect('members' in detailForPim).toBe(false);
+      expect(
+        detailForPim.recentActivity.some((a) => a.action === 'player_invitation.created')
+      ).toBe(false);
 
       // Permisos de jugador vs GM: el jugador no pot modificar la campanya ni generar invitacions
       await expect(

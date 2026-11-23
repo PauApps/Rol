@@ -10,6 +10,7 @@ export const dynamic = 'force-dynamic';
 const createCharacterSchema = z.object({
   name: z.string().trim().min(1, 'El nom del personatge és obligatori.').max(100),
   memberId: z.string().uuid().nullable().optional(),
+  overrideLimit: z.boolean().optional(),
 });
 
 export async function GET(

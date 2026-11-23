@@ -515,6 +515,13 @@ export async function acceptPlayerInvitation(
         throw forbidden('ACCOUNT_INACTIVE', 'Aquest compte no es troba actiu.');
       }
 
+      if (userRow.role === 'admin') {
+        throw forbidden(
+          'ADMIN_CANNOT_BE_PLAYER',
+          'Un compte d’administrador principal no pot unir-se com a jugador.'
+        );
+      }
+
       if (row.campaign.gmUserId === userRow.id) {
         throw conflict(
           'ALREADY_CAMPAIGN_GM',

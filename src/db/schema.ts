@@ -193,6 +193,7 @@ export const characters = pgTable(
       .$type<Record<string, unknown>>()
       .notNull()
       .default({}),
+    gmNotes: text('gm_notes').notNull().default(''),
     createdByUserId: uuid('created_by_user_id').references(() => users.id, {
       onDelete: 'set null',
     }),

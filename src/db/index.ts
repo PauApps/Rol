@@ -1,14 +1,27 @@
 import fs from 'node:fs';
-import path from 'node:path';
 import { PGlite } from '@electric-sql/pglite';
+import { drizzle as drizzleNodePg } from 'drizzle-orm/node-postgres';
 import { drizzle as drizzlePglite } from 'drizzle-orm/pglite';
 import { migrate as migratePglite } from 'drizzle-orm/pglite/migrator';
-import { drizzle as drizzleNodePg } from 'drizzle-orm/node-postgres';
-import { migrate as migrateNodePg } from 'drizzle-orm/node-postgres/migrator';
 import { Pool } from 'pg';
+import {
+  getMigrationsFolder,
+  isProductionRuntime,
+  resolveDatabaseConfig,
+  resolveMigrationDatabaseConfig,
+  type ResolvedDatabaseConfig,
+} from './config';
+import { applyLockedMigrationsAndSeed } from './migrate';
 import * as schema from './schema';
-import { ensureBaseSeed, seedGameSystems } from './seed';
+import { seedGameSystems } from './seed';
 import type { AppDatabase } from './types';
+
+export {
+  isProductionRuntime,
+  resolveDatabaseConfig,
+  resolveMigrationDatabaseConfig,
+  type ResolvedDatabaseConfig,
+};
 
 interface GlobalDbState {
   initPromise?: Promise<AppDatabase>;
@@ -25,45 +38,43 @@ if (!globalForDb.__rolDbState) {
   globalForDb.__rolDbState = {};
 }
 
-function getMigrationsFolder(): string {
-  return path.join(process.cwd(), 'drizzle');
-}
-
 async function initializeAppDb(): Promise<AppDatabase> {
-  const databaseUrl = process.env.DATABASE_URL?.trim() || 'pglite://./data/rol-dev';
-  const migrationsFolder = getMigrationsFolder();
+  const config = resolveDatabaseConfig(process.env);
   const state = globalForDb.__rolDbState!;
 
-  if (databaseUrl.startsWith('pglite://')) {
-    const rawDir = databaseUrl.slice('pglite://'.length) || './data/rol-dev';
-    const dataDir = path.isAbsolute(rawDir) ? rawDir : path.resolve(process.cwd(), rawDir);
-    fs.mkdirSync(dataDir, { recursive: true });
+  if (config.driver === 'pglite') {
+    if (isProductionRuntime(process.env)) {
+      throw new Error('PGlite no es pot inicialitzar en un entorn de producció.');
+    }
 
-    const client = new PGlite(dataDir);
+    fs.mkdirSync(config.dataDir, { recursive: true });
+
+    const client = new PGlite(config.dataDir);
     await client.waitReady;
     const db = drizzlePglite(client, { schema });
-    await migratePglite(db, { migrationsFolder });
-    await ensureBaseSeed(db);
+    await applyLockedMigrationsAndSeed(db, getMigrationsFolder());
 
     state.pgliteClient = client;
     state.db = db;
     return db;
   }
 
-  if (databaseUrl.startsWith('postgres://') || databaseUrl.startsWith('postgresql://')) {
-    const pool = new Pool({ connectionString: databaseUrl });
-    const db = drizzleNodePg(pool, { schema });
-    await migrateNodePg(db, { migrationsFolder });
-    await ensureBaseSeed(db);
+  const production = isProductionRuntime(process.env);
+  const pool = new Pool({
+    connectionString: config.connectionString,
+    max: production ? 5 : 10,
+  });
+  const db = drizzleNodePg(pool, { schema });
 
-    state.pgPool = pool;
-    state.db = db;
-    return db;
+  // En producció (Vercel + Neon) les migracions i la llavor inicial s'executen una sola vegada
+  // en temps de build (`npm run db:migrate`), evitant DDL concurrent i lectura de `drizzle/` en runtime.
+  if (!production) {
+    await applyLockedMigrationsAndSeed(db, getMigrationsFolder());
   }
 
-  throw new Error(
-    `Format de DATABASE_URL no suportat: "${databaseUrl}". Utilitza pglite:// o postgresql://`
-  );
+  state.pgPool = pool;
+  state.db = db;
+  return db;
 }
 
 export async function getDb(): Promise<AppDatabase> {

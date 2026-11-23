@@ -20,7 +20,20 @@ Totes les regles de seguretat s’apliquen **al servidor i a la capa de dades**,
 - Un GM només pot consultar, editar, enviar a la paperera, restaurar o convidar dins les campanyes on és `gm_user_id`.
 - Un jugador registrat o convidat només pot accedir a les campanyes on té un registre `campaign_members` amb `status = 'active'` i on la campanya no és a la paperera.
 - Canviar un UUID d’una altra campanya a la URL o a l’API retorna `403 Forbidden` (o `404` si no existeix), sense filtrar dades.
-- La resposta `getCampaignDetail` per a jugadors i convidats omet les llistes d’invitacions i els comptes d’altres participants; les consultes de personatges restringeixen els jugadors únicament als seus propis personatges.
+- La resposta `getCampaignDetail` per a jugadors i convidats omet les llistes d’invitacions, els comptes d’altres participants i els esdeveniments interns d’auditoria del GM (invitacions, recuperacions o revocacions).
+
+## Visibilitat i permisos sobre personatges
+
+- **Consulta dins la campanya:** tots els membres actius d’una campanya (GM, jugadors registrats i convidats) poden consultar la llista de personatges i les dades públiques de la fitxa dins la seva pròpia campanya (`listCampaignCharacters`, `getCampaignCharacter`).
+- **Protecció de camps privats del GM:** la columna `gm_notes`, la configuració `field_permissions` i qualsevol camí declarat dins `gmOnlyFields` s’eliminen al servidor (`stripGmOnlyFields`) abans d’enviar dades a jugadors o convidats.
+- **Edició autoritzada:** un jugador o convidat només pot modificar el seu propi personatge (`member_id = access.member.id`) i únicament els camps inclosos a `playerEditableFields` que no figurin a `gmOnlyFields`. El GM pot consultar i modificar qualsevol personatge de la seva campanya.
+- **Límits per jugador:** el límit `max_characters_per_player` es comprova en una transacció al servidor; els jugadors no el poden eludir ni forçar amb `overrideLimit`.
+
+## Vinculació d’identitat de convidats
+
+- Un convidat actiu (`kind = 'guest'`) pot vincular el seu accés a un compte nou (`role = 'player'`) o a un compte existent mitjançant `POST /api/auth/link-account`, verificant contrasenya al servidor en el segon cas.
+- Quan el compte destí ja participava a la mateixa campanya, la fusió comprova que la identitat no estigui revocada, verifica que la suma de personatges no superi `max_characters_per_player`, transfereix personatges i referències sense duplicats i elimina el registre redundant.
+- En completar la vinculació, es revoquen totes les sessions de convidat anteriors i qualsevol enllaç de recuperació pendent d’aquell membre, i s’emet una sessió de compte registrat.
 
 ## Invitacions de jugadors i recuperació segura d’accés
 

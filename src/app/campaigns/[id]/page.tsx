@@ -94,6 +94,8 @@ export default async function CampaignDetailPage({
           description: detail.campaign.description,
           systemId: detail.campaign.systemId,
           status: detail.campaign.status,
+          creationConfig: detail.campaign.creationConfig,
+          maxCharactersPerPlayer: detail.campaign.maxCharactersPerPlayer,
         }}
         system={{
           id: detail.system?.id ?? detail.campaign.systemId,
@@ -147,6 +149,9 @@ export default async function CampaignDetailPage({
           name: ch.name,
           systemId: ch.systemId,
           memberId: ch.memberId,
+          ownerDisplayName: ch.ownerDisplayName,
+          isMine: ch.isMine,
+          canEdit: ch.canEdit,
           createdAt: ch.createdAt.toISOString(),
         }))}
       />

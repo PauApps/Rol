@@ -1,0 +1,1 @@
+ALTER TABLE "characters" ADD COLUMN "gm_notes" text DEFAULT '' NOT NULL;

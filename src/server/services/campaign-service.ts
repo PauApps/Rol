@@ -9,6 +9,11 @@ import {
   type CampaignStatus,
 } from '@/db/schema';
 import type { AppDatabase } from '@/db/types';
+import {
+  campaignCreationConfigSchema,
+  normalizeCampaignCreationConfig,
+  type CampaignCreationConfig,
+} from '@/domain/campaigns/creation-config';
 import { badRequest, forbidden, gone, notFound } from '@/domain/errors';
 import { assertCampaignAccess, assertCampaignGm, assertGm } from '../auth/policies';
 import { revokeAllSessionsForMember, type AuthContext } from '../auth/session';
@@ -160,7 +165,7 @@ export async function listCampaignsForActor(
   }
 
   if (ctx.user.role === 'gm') {
-    const rows = await db
+    const ownedRows = await db
       .select({
         campaign: campaigns,
         systemShortName: gameSystems.shortName,
@@ -175,19 +180,55 @@ export async function listCampaignsForActor(
       )
       .orderBy(desc(campaigns.updatedAt));
 
-    const counts = await fetchCampaignCounts(
-      db,
-      rows.map((r) => r.campaign.id)
+    const playerRows = includeTrash
+      ? []
+      : await db
+          .select({
+            campaign: campaigns,
+            systemShortName: gameSystems.shortName,
+          })
+          .from(campaignMembers)
+          .innerJoin(campaigns, eq(campaignMembers.campaignId, campaigns.id))
+          .innerJoin(gameSystems, eq(campaigns.systemId, gameSystems.id))
+          .where(
+            and(
+              eq(campaignMembers.userId, ctx.user.id),
+              eq(campaignMembers.status, 'active'),
+              isNull(campaigns.deletedAt)
+            )
+          )
+          .orderBy(desc(campaigns.updatedAt));
+
+    const combinedMap = new Map<
+      string,
+      { campaign: typeof campaigns.$inferSelect; systemShortName: string; role: 'gm' | 'player' }
+    >();
+    for (const r of ownedRows) {
+      combinedMap.set(r.campaign.id, { ...r, role: 'gm' });
+    }
+    for (const r of playerRows) {
+      if (!combinedMap.has(r.campaign.id)) {
+        combinedMap.set(r.campaign.id, { ...r, role: 'player' });
+      }
+    }
+
+    const combined = Array.from(combinedMap.values()).sort(
+      (a, b) => b.campaign.updatedAt.getTime() - a.campaign.updatedAt.getTime()
     );
 
-    return rows.map((r) => ({
+    const counts = await fetchCampaignCounts(
+      db,
+      combined.map((r) => r.campaign.id)
+    );
+
+    return combined.map((r) => ({
       id: r.campaign.id,
       name: r.campaign.name,
       description: r.campaign.description,
       systemId: r.campaign.systemId,
       systemShortName: r.systemShortName,
       status: r.campaign.status,
-      roleInCampaign: 'gm',
+      roleInCampaign: r.role,
       playerCount: counts.players.get(r.campaign.id) ?? 0,
       characterCount: counts.characters.get(r.campaign.id) ?? 0,
       deletedAt: r.campaign.deletedAt,
@@ -285,6 +326,19 @@ async function fetchCampaignCounts(db: AppDatabase, campaignIds: string[]) {
   return { players: playersMap, characters: charsMap };
 }
 
+const SHARED_PLAYER_AUDIT_ACTIONS = new Set([
+  'campaign.created',
+  'campaign.updated',
+  'campaign.creation_config_updated',
+  'player_invitation.accepted_guest',
+  'player_invitation.accepted_register',
+  'player_invitation.accepted_login',
+  'player_identity.linked_new_account',
+  'player_identity.linked_existing_account',
+  'character.base_created',
+  'character.updated',
+]);
+
 export async function getCampaignDetail(
   db: AppDatabase,
   ctx: AuthContext | null,
@@ -315,7 +369,12 @@ export async function getCampaignDetail(
     .from(auditLogs)
     .where(eq(auditLogs.campaignId, access.campaign.id))
     .orderBy(desc(auditLogs.createdAt))
-    .limit(15);
+    .limit(30);
+
+  const visibleActivity =
+    access.accessRole === 'gm'
+      ? rawActivity.slice(0, 15)
+      : rawActivity.filter((item) => SHARED_PLAYER_AUDIT_ACTIONS.has(item.action)).slice(0, 15);
 
   const baseCampaign = {
     id: access.campaign.id,
@@ -323,6 +382,7 @@ export async function getCampaignDetail(
     description: access.campaign.description,
     systemId: access.campaign.systemId,
     status: access.campaign.status,
+    creationConfig: normalizeCampaignCreationConfig(access.campaign.creationConfig),
     maxCharactersPerPlayer: access.campaign.maxCharactersPerPlayer,
     createdAt: access.campaign.createdAt,
     updatedAt: access.campaign.updatedAt,
@@ -366,7 +426,7 @@ export async function getCampaignDetail(
       campaign: baseCampaign,
       system,
       stats,
-      recentActivity: rawActivity,
+      recentActivity: visibleActivity,
       members,
       invitations,
       currentMember: null,
@@ -379,7 +439,7 @@ export async function getCampaignDetail(
     campaign: baseCampaign,
     system,
     stats,
-    recentActivity: rawActivity,
+    recentActivity: visibleActivity,
     currentMember: access.member
       ? {
           id: access.member.id,
@@ -389,6 +449,81 @@ export async function getCampaignDetail(
           joinedAt: access.member.joinedAt,
         }
       : null,
+  };
+}
+
+export async function updateCampaignCharacterRules(
+  db: AppDatabase,
+  ctx: AuthContext | null,
+  campaignId: string,
+  input: {
+    creationConfig?: Partial<CampaignCreationConfig>;
+    maxCharactersPerPlayer?: number | null;
+  }
+) {
+  const { gmCtx, campaign } = await assertCampaignGm(db, ctx, campaignId);
+
+  let nextCreationConfig = normalizeCampaignCreationConfig(campaign.creationConfig);
+  if (input.creationConfig !== undefined) {
+    const merged = {
+      ...nextCreationConfig,
+      ...input.creationConfig,
+    };
+    const parsed = campaignCreationConfigSchema.safeParse(merged);
+    if (!parsed.success) {
+      throw badRequest(
+        'INVALID_CREATION_CONFIG',
+        parsed.error.issues[0]?.message ?? 'Configuració de creació no vàlida.',
+        parsed.error.issues
+      );
+    }
+    nextCreationConfig = parsed.data;
+  }
+
+  let nextLimit = campaign.maxCharactersPerPlayer;
+  if (input.maxCharactersPerPlayer !== undefined) {
+    if (input.maxCharactersPerPlayer === null) {
+      nextLimit = null;
+    } else if (
+      !Number.isInteger(input.maxCharactersPerPlayer) ||
+      input.maxCharactersPerPlayer < 1 ||
+      input.maxCharactersPerPlayer > 50
+    ) {
+      throw badRequest(
+        'INVALID_CHARACTER_LIMIT',
+        'El límit de personatges per jugador ha de ser entre 1 i 50, o nul per il·limitat.'
+      );
+    } else {
+      nextLimit = input.maxCharactersPerPlayer;
+    }
+  }
+
+  const [updated] = await db
+    .update(campaigns)
+    .set({
+      creationConfig: nextCreationConfig,
+      maxCharactersPerPlayer: nextLimit,
+      updatedAt: new Date(),
+    })
+    .where(eq(campaigns.id, campaign.id))
+    .returning();
+
+  await recordAuditLog(db, {
+    actorUserId: gmCtx.user.id,
+    campaignId: updated.id,
+    action: 'campaign.creation_config_updated',
+    targetType: 'campaign',
+    targetId: updated.id,
+    metadata: {
+      freedomMode: nextCreationConfig.freedomMode,
+      startingLevel: nextCreationConfig.startingLevel,
+      maxCharactersPerPlayer: nextLimit,
+    },
+  });
+
+  return {
+    ...updated,
+    creationConfig: normalizeCampaignCreationConfig(updated.creationConfig),
   };
 }
 

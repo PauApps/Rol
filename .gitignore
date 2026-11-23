@@ -10,8 +10,8 @@ tsconfig.tsbuildinfo
 # Dades locals i entorn
 data/
 .env
-.env.local
-.env.*.local
+.env.*
+!.env.example
 
 # Cobertura i registres
 coverage/

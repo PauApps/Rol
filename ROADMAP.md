@@ -12,11 +12,12 @@ Basat en la metodologia incremental de [DOCUMENT_MESTRE.md](./DOCUMENT_MESTRE.md
 - Model base de personatges i revisions preparat a BD sense càlculs improvisats.
 - Suite de proves automatitzades d’autorització, aïllament i seguretat.
 
-## Fase 2 — Configuració de campanya i vinculació d’identitats
+## Fase 2 — Configuració de campanya i vinculació d’identitats *(Completada)*
 
-- Configuració de creació de personatges pel GM (nivell inicial, races/classes/antecedents permesos, mètode de característiques, creació lliure).
-- Límit de personatges per jugador dins cada campanya.
-- Flux perquè un convidat pugui vincular el seu historial i personatges a un compte registrat nou o existent.
+- Correcció d’auditoria de Fase 1: consulta grupal de personatges dins la mateixa campanya protegint `gm_notes`, `gmOnlyFields`, permisos d’edició granulars i activitat privada del GM.
+- Configuració editable de creació de personatges pel GM (nivell inicial, races/classes/antecedents permesos, mètode de característiques, camps obligatoris, restriccions i grau de llibertat).
+- Límit de personatges per jugador dins cada campanya validat transaccionalment al servidor.
+- Flux segur perquè un convidat pugui vincular el seu accés i personatges a un compte registrat nou o existent sense duplicar membres ni personatges.
 
 ## Fase 3 — Personatges i fitxes D&D 5e (2014)
 

@@ -4,10 +4,13 @@ import { useState, type FormEvent } from 'react';
 import { useRouter } from 'next/navigation';
 import {
   Activity,
+  Eye,
   KeyRound,
   Link2,
+  Plus,
   ShieldBan,
   Trash2,
+  UserCheck,
   UserPlus,
   Users,
 } from 'lucide-react';
@@ -16,7 +19,11 @@ import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
 import { CopyLinkBox } from '@/components/ui/CopyLinkBox';
 import { InputField, SelectField, TextareaField } from '@/components/ui/Field';
+import { Modal } from '@/components/ui/Modal';
 import { CampaignStatusBadge, MemberStatusBadge } from '@/components/ui/StatusBadge';
+import { CampaignCreationConfigCard } from './CampaignCreationConfigCard';
+import { GuestLinkAccountModal } from './GuestLinkAccountModal';
+import type { CampaignCreationConfig } from '@/domain/campaigns/creation-config';
 import type { CampaignStatus, MemberStatus, MemberType, PlayerInvitationKind } from '@/db/schema';
 
 export interface CampaignDetailMemberDto {
@@ -49,7 +56,25 @@ export interface CampaignCharacterDto {
   name: string;
   systemId: string;
   memberId: string | null;
+  ownerDisplayName: string | null;
+  isMine: boolean;
+  canEdit: boolean;
   createdAt: string;
+}
+
+interface CharacterInspectionDetail {
+  id: string;
+  name: string;
+  ownerDisplayName: string | null;
+  isMine: boolean;
+  canEdit: boolean;
+  editableFields: string[];
+  sheetData: Record<string, unknown>;
+  gmNotes?: string;
+  fieldPermissions?: {
+    playerEditableFields: string[];
+    gmOnlyFields: string[];
+  };
 }
 
 export interface CampaignDetailViewProps {
@@ -61,6 +86,8 @@ export interface CampaignDetailViewProps {
     description: string;
     systemId: string;
     status: CampaignStatus;
+    creationConfig: CampaignCreationConfig;
+    maxCharactersPerPlayer: number | null;
   };
   system: {
     id: string;
@@ -76,6 +103,20 @@ export interface CampaignDetailViewProps {
   invitations?: CampaignDetailInvitationDto[];
   currentMember: CampaignDetailMemberDto | null;
   characters: CampaignCharacterDto[];
+}
+
+function readNestedText(obj: Record<string, unknown>, section: string, field: string): string {
+  const sec = obj[section];
+  if (!sec || typeof sec !== 'object') return '';
+  const val = (sec as Record<string, unknown>)[field];
+  return typeof val === 'string' ? val : '';
+}
+
+function readStartingLevel(obj: Record<string, unknown>): string {
+  const prog = obj.progression;
+  if (!prog || typeof prog !== 'object') return '—';
+  const lvl = (prog as Record<string, unknown>).totalLevel;
+  return typeof lvl === 'number' ? `Nivell ${lvl}` : '—';
 }
 
 export function CampaignDetailClient({
@@ -100,6 +141,25 @@ export function CampaignDetailClient({
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [busyId, setBusyId] = useState<string | null>(null);
+
+  // Vinculació d'identitat de convidat
+  const [linkModalOpen, setLinkModalOpen] = useState(false);
+
+  // Personatges base (creació i inspecció/edició controlada)
+  const [newCharName, setNewCharName] = useState('');
+  const [newCharMemberId, setNewCharMemberId] = useState<string>('');
+  const [creatingChar, setCreatingChar] = useState(false);
+  const [charError, setCharError] = useState<string | null>(null);
+
+  const [inspectedChar, setInspectedChar] = useState<CharacterInspectionDetail | null>(null);
+  const [charModalLoading, setCharModalLoading] = useState(false);
+  const [charSaving, setCharSaving] = useState(false);
+  const [charModalError, setCharModalError] = useState<string | null>(null);
+  const [editCharName, setEditCharName] = useState('');
+  const [editAppearance, setEditAppearance] = useState('');
+  const [editBackstory, setEditBackstory] = useState('');
+  const [editGmNotes, setEditGmNotes] = useState('');
+  const [editEditableFields, setEditEditableFields] = useState<string[]>([]);
 
   async function handleSaveCampaign(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -232,6 +292,108 @@ export function CampaignDetailClient({
     }
   }
 
+  async function handleCreateCharacter(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setCharError(null);
+    setCreatingChar(true);
+    try {
+      const response = await fetch(`/api/campaigns/${campaign.id}/characters`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: newCharName,
+          memberId: canManage ? (newCharMemberId || null) : undefined,
+        }),
+      });
+      const data = await response.json();
+      if (!response.ok) {
+        setCharError(data?.error?.message ?? 'No s’ha pogut crear el personatge.');
+        return;
+      }
+      setNewCharName('');
+      router.refresh();
+    } catch {
+      setCharError('Error de connexió en crear el personatge.');
+    } finally {
+      setCreatingChar(false);
+    }
+  }
+
+  async function handleInspectCharacter(characterId: string) {
+    setCharModalError(null);
+    setCharModalLoading(true);
+    try {
+      const response = await fetch(`/api/campaigns/${campaign.id}/characters/${characterId}`);
+      const data = await response.json();
+      if (!response.ok) {
+        setCharError(data?.error?.message ?? 'No s’ha pogut carregar el personatge.');
+        return;
+      }
+      const ch = data.character as CharacterInspectionDetail;
+      setInspectedChar(ch);
+      setEditCharName(ch.name);
+      setEditAppearance(readNestedText(ch.sheetData, 'generalInfo', 'appearanceNotes'));
+      setEditBackstory(readNestedText(ch.sheetData, 'background', 'backstory'));
+      setEditGmNotes(ch.gmNotes ?? '');
+      setEditEditableFields(ch.fieldPermissions?.playerEditableFields ?? []);
+    } finally {
+      setCharModalLoading(false);
+    }
+  }
+
+  async function handleUpdateCharacter(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!inspectedChar) return;
+    setCharModalError(null);
+    setCharSaving(true);
+
+    try {
+      const payload: Record<string, unknown> = {};
+      if (canManage || inspectedChar.editableFields.includes('name')) {
+        payload.name = editCharName;
+      }
+      const sheetFields: Record<string, string> = {};
+      if (canManage || inspectedChar.editableFields.includes('generalInfo.appearanceNotes')) {
+        sheetFields['generalInfo.appearanceNotes'] = editAppearance;
+      }
+      if (canManage || inspectedChar.editableFields.includes('background.backstory')) {
+        sheetFields['background.backstory'] = editBackstory;
+      }
+      if (Object.keys(sheetFields).length > 0) {
+        payload.sheetFields = sheetFields;
+      }
+      if (canManage) {
+        payload.gmNotes = editGmNotes;
+        payload.fieldPermissions = {
+          playerEditableFields: editEditableFields,
+          gmOnlyFields: inspectedChar.fieldPermissions?.gmOnlyFields ?? [],
+        };
+      }
+
+      const response = await fetch(
+        `/api/campaigns/${campaign.id}/characters/${inspectedChar.id}`,
+        {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+        }
+      );
+      const data = await response.json();
+      if (!response.ok) {
+        setCharModalError(data?.error?.message ?? 'No s’ha pogut actualitzar el personatge.');
+        return;
+      }
+      setInspectedChar(null);
+      router.refresh();
+    } catch {
+      setCharModalError('Error de connexió en desar el personatge.');
+    } finally {
+      setCharSaving(false);
+    }
+  }
+
+  const activeMembers = members.filter((m) => m.status === 'active');
+
   return (
     <div className="space-y-6">
       {error && (
@@ -267,11 +429,19 @@ export function CampaignDetailClient({
         </Card>
       </div>
 
-      {/* Resum per a jugador / convidat */}
+      {/* Resum per a jugador / convidat + vinculació d'identitat */}
       {!canManage && currentMember && (
         <Card
           title="La teva participació"
           subtitle="Informació del teu accés a aquesta campanya."
+          actions={
+            currentMember.memberType === 'guest' ? (
+              <Button size="sm" variant="secondary" onClick={() => setLinkModalOpen(true)}>
+                <UserCheck className="h-3.5 w-3.5" />
+                Vincular a un compte
+              </Button>
+            ) : undefined
+          }
         >
           <div className="flex flex-wrap items-center gap-3 text-sm">
             <span>
@@ -282,8 +452,22 @@ export function CampaignDetailClient({
             </Badge>
             <MemberStatusBadge status={currentMember.status} />
           </div>
+          {currentMember.memberType === 'guest' && (
+            <p className="mt-2.5 text-xs text-[var(--rol-ink-secondary)]">
+              Pots vincular aquest accés de convidat a un compte nou o a un compte existent per
+              conservar tots els teus personatges i participar en més campanyes.
+            </p>
+          )}
         </Card>
       )}
+
+      {/* Configuració de creació de personatges i límit per jugador (Fase 2) */}
+      <CampaignCreationConfigCard
+        campaignId={campaign.id}
+        canManage={canManage}
+        initialConfig={campaign.creationConfig}
+        initialMaxCharactersPerPlayer={campaign.maxCharactersPerPlayer}
+      />
 
       {/* Gestió de campanya i invitacions (només GM) */}
       {canManage && (
@@ -482,26 +666,89 @@ export function CampaignDetailClient({
         </Card>
       )}
 
-      {/* Secció de personatges (base preparada per a Fase 3) */}
+      {/* Secció de personatges (visibilitat de campanya i base estructural Fase 3) */}
       <div className="grid gap-6 lg:grid-cols-2">
         <Card
-          title="Personatges (Base D&D 5e 2014)"
-          subtitle="Model de dades preparat; fitxes i càlculs previstos a la Fase 3."
-          actions={<Badge tone="neutral">En preparació — Fase 3</Badge>}
+          title="Personatges de la campanya"
+          subtitle="Tots els membres poden consultar les fitxes base del grup; només el propietari autoritzat o el GM les poden editar."
+          actions={<Badge tone="neutral">Fitxa D&D 5e completa a Fase 3</Badge>}
         >
-          <p className="text-sm text-[var(--rol-ink-secondary)]">
-            El repositori de dades ja inclou l’estructura modular per a personatges de{' '}
-            <strong>{system.name}</strong> i el registre de revisions sense càlculs improvisats.
-          </p>
-          {characters.length > 0 && (
-            <ul className="mt-3 space-y-1.5 text-sm">
+          <form onSubmit={handleCreateCharacter} className="mb-4 flex flex-col gap-2.5 sm:flex-row sm:items-end">
+            <div className="flex-1">
+              <InputField
+                label="Nou personatge base"
+                htmlFor="new-char-name"
+                type="text"
+                required
+                value={newCharName}
+                onChange={(e) => setNewCharName(e.target.value)}
+                placeholder="Ex. Pim Bramble"
+              />
+            </div>
+
+            {canManage && activeMembers.length > 0 && (
+              <div className="sm:w-44">
+                <SelectField
+                  label="Assignar a"
+                  htmlFor="new-char-owner"
+                  value={newCharMemberId}
+                  onChange={(e) => setNewCharMemberId(e.target.value)}
+                >
+                  <option value="">Sense jugador (GM)</option>
+                  {activeMembers.map((m) => (
+                    <option key={m.id} value={m.id}>
+                      {m.displayName}
+                    </option>
+                  ))}
+                </SelectField>
+              </div>
+            )}
+
+            <Button type="submit" disabled={creatingChar} className="shrink-0">
+              <Plus className="h-4 w-4" />
+              {creatingChar ? 'Creant…' : 'Afegir'}
+            </Button>
+          </form>
+
+          {charError && (
+            <div
+              role="alert"
+              className="mb-3 rounded-[var(--rol-radius-md)] border border-[var(--rol-status-danger-border)] bg-[var(--rol-status-danger-bg)] px-3 py-2 text-xs text-[var(--rol-status-danger-ink)]"
+            >
+              {charError}
+            </div>
+          )}
+
+          {characters.length === 0 ? (
+            <p className="text-sm text-[var(--rol-ink-muted)]">
+              Encara no hi ha cap personatge creat en aquesta campanya.
+            </p>
+          ) : (
+            <ul className="space-y-2 text-sm">
               {characters.map((ch) => (
                 <li
                   key={ch.id}
-                  className="flex items-center justify-between rounded border border-[var(--rol-border-subtle)] px-3 py-1.5"
+                  className="flex flex-wrap items-center justify-between gap-2 rounded-[var(--rol-radius-md)] border border-[var(--rol-border-subtle)] bg-[var(--rol-bg-surface-alt)]/40 px-3.5 py-2.5"
                 >
-                  <span className="font-medium">{ch.name}</span>
-                  <span className="text-xs text-[var(--rol-ink-muted)]">{ch.systemId}</span>
+                  <div className="min-w-0">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="font-semibold text-[var(--rol-ink-primary)]">{ch.name}</span>
+                      {ch.isMine && <Badge tone="gold">El teu</Badge>}
+                      {!canManage && !ch.canEdit && <Badge tone="neutral">Només lectura</Badge>}
+                    </div>
+                    <p className="text-xs text-[var(--rol-ink-muted)]">
+                      {ch.ownerDisplayName ? `Jugador: ${ch.ownerDisplayName}` : 'Personatge del GM'}
+                    </p>
+                  </div>
+                  <Button
+                    size="sm"
+                    variant="secondary"
+                    disabled={charModalLoading}
+                    onClick={() => handleInspectCharacter(ch.id)}
+                  >
+                    <Eye className="h-3.5 w-3.5" />
+                    {ch.canEdit ? 'Consultar / Editar' : 'Consultar'}
+                  </Button>
                 </li>
               ))}
             </ul>
@@ -535,6 +782,145 @@ export function CampaignDetailClient({
           )}
         </Card>
       </div>
+
+      {/* Modal de vinculació d'identitat per a convidats */}
+      {!canManage && currentMember?.memberType === 'guest' && (
+        <GuestLinkAccountModal
+          open={linkModalOpen}
+          onClose={() => setLinkModalOpen(false)}
+          defaultDisplayName={currentMember.displayName}
+        />
+      )}
+
+      {/* Modal d'inspecció i edició controlada de personatge base */}
+      <Modal
+        open={Boolean(inspectedChar)}
+        onClose={() => setInspectedChar(null)}
+        title={inspectedChar?.name ?? 'Personatge'}
+        description={`Estructura base (${readStartingLevel(inspectedChar?.sheetData ?? {})}) · Les estadístiques D&D 5e s’afegiran a la Fase 3.`}
+      >
+        {inspectedChar && (
+          <form onSubmit={handleUpdateCharacter} className="space-y-4">
+            <div className="flex flex-wrap items-center gap-2 text-xs">
+              <Badge tone="gold">
+                {inspectedChar.ownerDisplayName
+                  ? `Jugador: ${inspectedChar.ownerDisplayName}`
+                  : 'Personatge del GM'}
+              </Badge>
+              <Badge tone={inspectedChar.canEdit ? 'success' : 'neutral'}>
+                {inspectedChar.canEdit ? 'Edició autoritzada' : 'Només consulta'}
+              </Badge>
+            </div>
+
+            <InputField
+              label="Nom del personatge"
+              htmlFor="char-modal-name"
+              type="text"
+              value={editCharName}
+              onChange={(e) => setEditCharName(e.target.value)}
+              disabled={
+                !canManage &&
+                (!inspectedChar.canEdit || !inspectedChar.editableFields.includes('name'))
+              }
+            />
+
+            <TextareaField
+              label="Descripció i aspecte"
+              htmlFor="char-modal-appearance"
+              rows={2}
+              value={editAppearance}
+              onChange={(e) => setEditAppearance(e.target.value)}
+              disabled={
+                !canManage &&
+                (!inspectedChar.canEdit ||
+                  !inspectedChar.editableFields.includes('generalInfo.appearanceNotes'))
+              }
+            />
+
+            <TextareaField
+              label="Història personal"
+              htmlFor="char-modal-backstory"
+              rows={3}
+              value={editBackstory}
+              onChange={(e) => setEditBackstory(e.target.value)}
+              disabled={
+                !canManage &&
+                (!inspectedChar.canEdit ||
+                  !inspectedChar.editableFields.includes('background.backstory'))
+              }
+            />
+
+            {canManage && (
+              <>
+                <TextareaField
+                  label="Notes privades del GM (invisibles per als jugadors)"
+                  htmlFor="char-modal-gm-notes"
+                  rows={2}
+                  value={editGmNotes}
+                  onChange={(e) => setEditGmNotes(e.target.value)}
+                  placeholder="Secrets, trames o recordatoris interns del GM…"
+                />
+
+                <div className="space-y-1.5">
+                  <p className="text-xs font-semibold text-[var(--rol-ink-primary)]">
+                    Camps que el jugador propietari pot editar
+                  </p>
+                  <div className="flex flex-wrap gap-2 text-xs">
+                    {(
+                      [
+                        { path: 'name', label: 'Nom' },
+                        { path: 'generalInfo.appearanceNotes', label: 'Aspecte' },
+                        { path: 'background.backstory', label: 'Història' },
+                      ] as const
+                    ).map((opt) => {
+                      const active = editEditableFields.includes(opt.path);
+                      return (
+                        <label
+                          key={opt.path}
+                          className="inline-flex items-center gap-1.5 rounded border border-[var(--rol-border-subtle)] px-2.5 py-1 cursor-pointer"
+                        >
+                          <input
+                            type="checkbox"
+                            checked={active}
+                            onChange={() =>
+                              setEditEditableFields((prev) =>
+                                prev.includes(opt.path)
+                                  ? prev.filter((p) => p !== opt.path)
+                                  : [...prev, opt.path]
+                              )
+                            }
+                          />
+                          <span>{opt.label}</span>
+                        </label>
+                      );
+                    })}
+                  </div>
+                </div>
+              </>
+            )}
+
+            {charModalError && (
+              <div
+                role="alert"
+                className="rounded-[var(--rol-radius-md)] border border-[var(--rol-status-danger-border)] bg-[var(--rol-status-danger-bg)] px-3.5 py-2.5 text-sm text-[var(--rol-status-danger-ink)]"
+              >
+                {charModalError}
+              </div>
+            )}
+
+            <div className="flex justify-end gap-2 pt-1">
+              <Button type="button" variant="ghost" onClick={() => setInspectedChar(null)}>
+                Tancar
+              </Button>
+              {inspectedChar.canEdit && (
+                <Button type="submit" disabled={charSaving}>
+                  {charSaving ? 'Desant…' : 'Desar canvis'}
+                </Button>
+              )}
+            </div>
+          </form>
+        )}
+      </Modal>
     </div>
   );
 }
