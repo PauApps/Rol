@@ -66,6 +66,7 @@ export const campaigns = pgTable(
       .notNull()
       .default({}),
     maxCharactersPerPlayer: integer('max_characters_per_player'),
+    virtualDiceEnabled: boolean('virtual_dice_enabled').notNull().default(false),
     deletedAt: timestamp('deleted_at', { withTimezone: true }),
     purgeEligibleAt: timestamp('purge_eligible_at', { withTimezone: true }),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),

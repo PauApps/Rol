@@ -8,7 +8,7 @@ Totes les taules resideixen en **PostgreSQL** i es defineixen a [src/db/schema.t
 |---|---|---|
 | `users` | Comptes registrats (`admin`, `gm`, `player`) | `email` únic; `role` i `status` (`active`, `blocked`, `disabled`) validats per `CHECK`; `max_campaigns` opcional |
 | `game_systems` | Catàleg de sistemes de rol | Clau textual (`dnd5e-2014` inicial) per admetre nous sistemes |
-| `campaigns` | Campanyes creades per un GM | FK `gm_user_id -> users.id` (`RESTRICT`), `system_id -> game_systems.id`, `status` (`active`, `paused`, `finished`), `creation_config` JSONB (regles de creació), `max_characters_per_player` (límit per jugador), paperera reversible (`deleted_at`, `purge_eligible_at`) |
+| `campaigns` | Campanyes creades per un GM | FK `gm_user_id -> users.id` (`RESTRICT`), `system_id -> game_systems.id`, `status` (`active`, `paused`, `finished`), `creation_config` JSONB (regles de creació), `max_characters_per_player` (límit per jugador), `virtual_dice_enabled` (`boolean`, activació del dau virtual pel GM, afegit a `0002_hard_firelord.sql`), paperera reversible (`deleted_at`, `purge_eligible_at`) |
 | `campaign_members` | Participants d’una campanya (convidats o registrats) | `member_type` (`guest`, `registered`), `user_id` nul·lable, índex únic parcial `(campaign_id, user_id)` quan `user_id IS NOT NULL` |
 | `sessions` | Sessions actives de comptes o convidats | Només desa `token_hash` (SHA-256); restricció `CHECK` XOR entre `user_id` i `campaign_member_id`; `revoked_at` i `expires_at` |
 | `gm_invitations` | Invitacions tancades per registrar nous GM | Només desa `token_hash`, vinculada a `email`, d’un sol ús (`used_at`) i revocable (`revoked_at`) |
@@ -19,7 +19,7 @@ Totes les taules resideixen en **PostgreSQL** i es defineixen a [src/db/schema.t
 
 | Taula | Estat | Propòsit |
 |---|---|---|
-| `characters` | Base estructural activa (Fase 2); fitxa completa a Fase 3 | Emmagatzema personatges per campanya i membre, `schema_version`, `sheet_data`, `custom_fields`, `field_permissions` JSONB i `gm_notes` (reservat exclusivament al GM, afegit a la migració `0001_cooing_hiroim.sql`) |
+| `characters` | Model universal `v2` actiu (Fase 3, Increment 2) | Emmagatzema personatges per campanya i membre, `schema_version` (`v1 → v2` retrocompatible), `sheet_data` JSONB validat amb Zod, `custom_fields`, `field_permissions` (`playerEditableFields`, `gmOnlyFields`, `authorizedOverrideFields`) i `gm_notes` (reservat exclusivament al GM, afegit a la migració `0001_cooing_hiroim.sql`) |
 | `character_revisions` | Preparada (Fase 4) | Historial immutable de canvis per camp (`field_path`, `previous_value`, `new_value`, `reason`, `session_ref`) |
 
 ## Eliminació reversible (Paperera de 30 dies)

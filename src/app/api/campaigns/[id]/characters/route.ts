@@ -1,17 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { z } from 'zod';
 import { getDb } from '@/db';
+import { createCharacterRequestSchema } from '@/domain/systems/dnd5e-2014';
 import { getServerAuthContext } from '@/server/auth/session';
 import { assertUuid, handleApiError, parseJsonBody } from '@/server/http';
 import { createCharacterBase, listCampaignCharacters } from '@/server/services/character-service';
 
 export const dynamic = 'force-dynamic';
-
-const createCharacterSchema = z.object({
-  name: z.string().trim().min(1, 'El nom del personatge és obligatori.').max(100),
-  memberId: z.string().uuid().nullable().optional(),
-  overrideLimit: z.boolean().optional(),
-});
 
 export async function GET(
   _request: NextRequest,
@@ -36,7 +30,7 @@ export async function POST(
   try {
     const { id } = await context.params;
     assertUuid(id, 'campanya');
-    const body = await parseJsonBody(request, createCharacterSchema);
+    const body = await parseJsonBody(request, createCharacterRequestSchema);
     const ctx = await getServerAuthContext();
     const db = await getDb();
     const character = await createCharacterBase(db, ctx, id, body);

@@ -1,0 +1,1 @@
+ALTER TABLE "campaigns" ADD COLUMN "virtual_dice_enabled" boolean DEFAULT false NOT NULL;

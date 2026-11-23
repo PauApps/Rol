@@ -17,6 +17,7 @@ const updateRulesSchema = z.object({
     .max(50, 'El límit màxim és 50 personatges.')
     .nullable()
     .optional(),
+  virtualDiceEnabled: z.boolean().optional(),
 });
 
 export async function PATCH(
@@ -35,6 +36,7 @@ export async function PATCH(
         id: campaign.id,
         creationConfig: campaign.creationConfig,
         maxCharactersPerPlayer: campaign.maxCharactersPerPlayer,
+        virtualDiceEnabled: campaign.virtualDiceEnabled,
       },
     });
   } catch (error) {

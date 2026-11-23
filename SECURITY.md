@@ -25,9 +25,11 @@ Totes les regles de seguretat s’apliquen **al servidor i a la capa de dades**,
 ## Visibilitat i permisos sobre personatges
 
 - **Consulta dins la campanya:** tots els membres actius d’una campanya (GM, jugadors registrats i convidats) poden consultar la llista de personatges i les dades públiques de la fitxa dins la seva pròpia campanya (`listCampaignCharacters`, `getCampaignCharacter`).
-- **Protecció de camps privats del GM:** la columna `gm_notes`, la configuració `field_permissions` i qualsevol camí declarat dins `gmOnlyFields` s’eliminen al servidor (`stripGmOnlyFields`) abans d’enviar dades a jugadors o convidats.
+- **Normalització segura (`v1 → v2`) i càlculs derivats al servidor:** les fitxes es normalitzen a l’esquema universal `D&D 5e (2014)` (`schemaVersion: 2`) sense pèrdua de dades i totes les peticions passen validació estricta **Zod** amb `.strict()` per rebutjar camps desconeguts, valors derivats falsificats o nivells per damunt de 20.
+- **Protecció de camps privats del GM:** la columna `gm_notes`, la configuració `field_permissions` i qualsevol camí declarat dins `gmOnlyFields` s’eliminen al servidor (`stripGmOnlyFields`) abans d’enviar dades o calcular la instantània `computed` per a jugadors o convidats.
+- **Protecció dels càlculs oficials de D&D 5e (2014):** les excepcions que alteren fórmules oficials (`savingThrows.overrides`, `skills.overrides`, `armorClass.override`, `initiative.override`, `initiative.bonus`, `attacks.bonusOverride`, `attacks.attackBonus`, `spellcasting.abilityOverride`, `spellcasting.saveDcOverride`, `spellcasting.attackBonusOverride`, `spellSlotOverrides` i `customResources`) queden bloquejades per als jugadors (`403 OFFICIAL_CALCULATION_PROTECTED`), llevat que el GM els autoritzi explícitament camí a camí dins `fieldPermissions.authorizedOverrideFields`.
 - **Edició autoritzada:** un jugador o convidat només pot modificar el seu propi personatge (`member_id = access.member.id`) i únicament els camps inclosos a `playerEditableFields` que no figurin a `gmOnlyFields`. El GM pot consultar i modificar qualsevol personatge de la seva campanya.
-- **Límits per jugador:** el límit `max_characters_per_player` es comprova en una transacció al servidor; els jugadors no el poden eludir ni forçar amb `overrideLimit`.
+- **Restriccions de creació i límits per jugador:** el servidor valida obligatòriament `max_characters_per_player` (en transacció) i les regles de `creation_config` (`freedomMode`, `startingLevel`, `allowedRaces`, `allowedClasses`, `allowedBackgrounds` i `requiredFields`), mantenint l’autoritat d’excepció del GM.
 
 ## Vinculació d’identitat de convidats
 

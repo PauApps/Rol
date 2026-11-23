@@ -96,6 +96,7 @@ export default async function CampaignDetailPage({
           status: detail.campaign.status,
           creationConfig: detail.campaign.creationConfig,
           maxCharactersPerPlayer: detail.campaign.maxCharactersPerPlayer,
+          virtualDiceEnabled: detail.campaign.virtualDiceEnabled,
         }}
         system={{
           id: detail.system?.id ?? detail.campaign.systemId,

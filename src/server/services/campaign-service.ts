@@ -384,6 +384,7 @@ export async function getCampaignDetail(
     status: access.campaign.status,
     creationConfig: normalizeCampaignCreationConfig(access.campaign.creationConfig),
     maxCharactersPerPlayer: access.campaign.maxCharactersPerPlayer,
+    virtualDiceEnabled: access.campaign.virtualDiceEnabled,
     createdAt: access.campaign.createdAt,
     updatedAt: access.campaign.updatedAt,
   };
@@ -459,6 +460,7 @@ export async function updateCampaignCharacterRules(
   input: {
     creationConfig?: Partial<CampaignCreationConfig>;
     maxCharactersPerPlayer?: number | null;
+    virtualDiceEnabled?: boolean;
   }
 ) {
   const { gmCtx, campaign } = await assertCampaignGm(db, ctx, campaignId);
@@ -498,11 +500,17 @@ export async function updateCampaignCharacterRules(
     }
   }
 
+  const nextVirtualDice =
+    input.virtualDiceEnabled !== undefined
+      ? input.virtualDiceEnabled
+      : campaign.virtualDiceEnabled;
+
   const [updated] = await db
     .update(campaigns)
     .set({
       creationConfig: nextCreationConfig,
       maxCharactersPerPlayer: nextLimit,
+      virtualDiceEnabled: nextVirtualDice,
       updatedAt: new Date(),
     })
     .where(eq(campaigns.id, campaign.id))
@@ -518,6 +526,7 @@ export async function updateCampaignCharacterRules(
       freedomMode: nextCreationConfig.freedomMode,
       startingLevel: nextCreationConfig.startingLevel,
       maxCharactersPerPlayer: nextLimit,
+      virtualDiceEnabled: nextVirtualDice,
     },
   });
 

@@ -1,5 +1,24 @@
 # Registre de canvis (Changelog)
 
+## [0.3.0-dev] — Fase 3, Increments 1 i 2 (Motor D&D 5e 2014, validació Zod v2, persistència i permisos granulars)
+
+### Afegit i actualitzat (Increment 2 + revisió Increment 1)
+- **Validació Zod completa v2 (`src/domain/systems/dnd5e-2014/validation.ts`):** esquemes estrictes `.strict()` (`dnd5e2014SheetSchema`, `dnd5e2014SheetPatchSchema`, `createCharacterRequestSchema`, `updateCharacterRequestSchema`) amb fusió segura (`mergeDnd5e2014SheetPatch`) i rebuig de camps desconeguts, valors derivats falsificats o nivells superiors a 20.
+- **Protecció de càlculs oficials i permisos granulars (`src/domain/systems/dnd5e-2014/permissions.ts`):** bloqueig al servidor d’overrides oficials (`savingThrows.overrides`, `skills.overrides`, `armorClass.override`, `initiative.*`, `attacks.bonusOverride`, `attacks.attackBonus`, `spellcasting.*Override`, `spellSlotOverrides`, `customResources`) llevat d’autorització explícita del GM (`fieldPermissions.authorizedOverrideFields`).
+- **Validador de creació de campanya (`src/domain/systems/dnd5e-2014/creation-validator.ts`):** aplicació al servidor de `freedomMode` (`free`, `guided`, `strict`), `startingLevel`, llistes permeses (amb resolució d’àlies catalans) i `requiredFields`, preservant les excepcions del GM.
+- **Servei i endpoints de personatges (`character-service.ts`, `/api/campaigns/[id]/characters`, `/api/campaigns/[id]/characters/[characterId]`):** normalització transparent de fitxes `v1 → v2` sense pèrdua de dades, càlcul en viu de `computed` respectant `gmOnlyFields`, i actualització a `schemaVersion: 2`.
+- **Ajustos d’Increment 1:** acotament oficial estrictament fins a nivell 20 a `catalog.ts` i `rules.ts` (`MAX_OFFICIAL_LEVEL_2014 = 20`, sense extrapolació) i distinció a `rollD20Check()` (`dice.ts`) entre `isNatural20`/`isNatural1` i `isCriticalHit`/`isCriticalMiss` exclusius d’atacs (`checkType === 'attack'`).
+- **Noves proves:** ampliació de `tests/dnd5e-2014-rules-engine.test.ts` i `tests/phase2-campaign-rules-and-limits.test.ts`, més nova suite `tests/phase3-character-persistence-and-permissions.test.ts` (fitxes v2, compatibilitat v1, Zod, permisos granulars, restriccions de campanya, persistència entre sessions i integritat de migracions `0000 -> 0001 -> 0002`).
+
+### Afegit (Increment 1)
+- **Configuració del dau virtual controlada pel GM:** nova columna `campaigns.virtual_dice_enabled` (`drizzle/0002_hard_firelord.sql`, per defecte `false`), exposada a `getCampaignDetail`, editable únicament pel GM propietari via `PATCH /api/campaigns/[id]/creation-config` i integrada al panell de campanya.
+- **Model universal D&D 5e (2014) (`schemaVersion: 2`):** catàleg base de les 12 classes, 18 habilitats, 6 característiques, taula XP 1–20 i espais de conjur (`catalog.ts`), més normalització retrocompatible `v1 → v2` (`normalizeDnd5e2014Sheet`) sense dades específiques de Pim per defecte.
+- **Motor pur de regles D&D 5e (2014):**
+  - `rules.ts`: modificadors, bonificació de competència oficial (1–20, màxim +6), 6 salvacions, 18 habilitats amb competència/mitja competència/expertesa/excepcions, percepció/investigació/perspicàcia passives, classe d’armadura (armadures, escut, Bàrbar, Monjo, override), màgia (CD, atac, espais complets/mitjans/terços/pacte i grimori) i progressió oficial fins a nivell 20.
+  - `resources.ts`: recursos modulars segons classe, subclasse i nivell (Ira, Inspiració bàrdica, Canalitzar divinitat, Forma salvatge / Forma estel·lar / Mapa estel·lar, Segon alè / Acció sobtada / Indomable / Daus de superioritat, Punts de Ki, Imposició de mans / Sentit diví, Cop de sort, Punts de bruixeria, Arcanum místic, Recuperació arcana i recursos personalitzats).
+  - `dice.ts`: lògica de tirades `d20` amb avantatge, desavantatge i cancel·lació mútua estricta segons D&D 5e 2014.
+- Noves proves a `tests/dnd5e-2014-rules-engine.test.ts` i `tests/dnd5e-2014-virtual-dice-config.test.ts`.
+
 ## [0.2.0] — Auditoria Fase 1 i Fase 2
 
 ### Corregit (Auditoria de Fase 1)

@@ -88,6 +88,7 @@ export interface CampaignDetailViewProps {
     status: CampaignStatus;
     creationConfig: CampaignCreationConfig;
     maxCharactersPerPlayer: number | null;
+    virtualDiceEnabled: boolean;
   };
   system: {
     id: string;
@@ -461,12 +462,13 @@ export function CampaignDetailClient({
         </Card>
       )}
 
-      {/* Configuració de creació de personatges i límit per jugador (Fase 2) */}
+      {/* Configuració de creació de personatges, límit per jugador i dau virtual */}
       <CampaignCreationConfigCard
         campaignId={campaign.id}
         canManage={canManage}
         initialConfig={campaign.creationConfig}
         initialMaxCharactersPerPlayer={campaign.maxCharactersPerPlayer}
+        initialVirtualDiceEnabled={campaign.virtualDiceEnabled}
       />
 
       {/* Gestió de campanya i invitacions (només GM) */}

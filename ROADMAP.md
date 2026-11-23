@@ -19,12 +19,11 @@ Basat en la metodologia incremental de [DOCUMENT_MESTRE.md](./DOCUMENT_MESTRE.md
 - Límit de personatges per jugador dins cada campanya validat transaccionalment al servidor.
 - Flux segur perquè un convidat pugui vincular el seu accés i personatges a un compte registrat nou o existent sense duplicar membres ni personatges.
 
-## Fase 3 — Personatges i fitxes D&D 5e (2014)
+## Fase 3 — Personatges i fitxes D&D 5e (2014) *(En curs — Increments 1 i 2 completats)*
 
-- Auditoria prèvia de la fitxa HTML de referència d’en Pim Bramble.
-- Implementació completa de tots els apartats de fitxa (`DOCUMENT_MESTRE.md` §6.2) i camps personalitzats.
-- Motor compartit de càlculs oficials D&D 5e (2014) protegits per defecte + excepcions configurables pel GM (homebrew).
-- Permisos granulars d’edició per camp (GM vs jugador) i còpia selectiva de configuració bàsica entre campanyes.
+- **Increment 1 *(Completat)*:** Model universal `v2` D&D 5e (2014), motor de regles pur (nivells 1–20 oficials, crítics exclusius d’atac, recursos modulars, tirades `d20`) i configuració `virtualDiceEnabled` controlada pel GM (`false` per defecte).
+- **Increment 2 *(Completat)*:** Validació completa **Zod** (`dnd5e2014SheetSchema` i `dnd5e2014SheetPatchSchema`), compatibilitat retroactiva `v1 → v2` a `character-service.ts`, permisos granulars per secció/camp, protecció dels càlculs oficials davant jugadors, aplicació al servidor de `creationConfig` i proves de persistència/migracions.
+- **Increment 3 *(Pendent — proper pas un cop incorporat l’HTML de referència)*:** Auditoria de `Fitxa_Interactiva_Pim_Bramble-v5.html` i implementació de la interfície completa de les 5 pestanyes + camps personalitzats i còpia selectiva de configuració entre campanyes.
 
 ## Fase 4 — Historial, auditories de fitxa i biblioteca de manuals
 

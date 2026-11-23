@@ -2,7 +2,7 @@
 
 import { useState, type FormEvent } from 'react';
 import { useRouter } from 'next/navigation';
-import { ScrollText } from 'lucide-react';
+import { Dices, ScrollText } from 'lucide-react';
 import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
@@ -23,6 +23,7 @@ interface CampaignCreationConfigCardProps {
   canManage: boolean;
   initialConfig: CampaignCreationConfig;
   initialMaxCharactersPerPlayer: number | null;
+  initialVirtualDiceEnabled: boolean;
 }
 
 function parseCommaList(raw: string): string[] {
@@ -37,6 +38,7 @@ export function CampaignCreationConfigCard({
   canManage,
   initialConfig,
   initialMaxCharactersPerPlayer,
+  initialVirtualDiceEnabled,
 }: CampaignCreationConfigCardProps) {
   const router = useRouter();
   const [freedomMode, setFreedomMode] = useState<CreationFreedomMode>(initialConfig.freedomMode);
@@ -58,6 +60,7 @@ export function CampaignCreationConfigCard({
   const [maxCharsText, setMaxCharsText] = useState(
     initialMaxCharactersPerPlayer !== null ? String(initialMaxCharactersPerPlayer) : ''
   );
+  const [virtualDiceEnabled, setVirtualDiceEnabled] = useState<boolean>(initialVirtualDiceEnabled);
 
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -93,6 +96,7 @@ export function CampaignCreationConfigCard({
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           maxCharactersPerPlayer: parsedLimit,
+          virtualDiceEnabled,
           creationConfig: {
             freedomMode,
             startingLevel: Number(startingLevel),
@@ -110,7 +114,7 @@ export function CampaignCreationConfigCard({
         setError(data?.error?.message ?? 'No s’ha pogut desar la configuració de creació.');
         return;
       }
-      setSaveMessage('Regles de creació i límit desats correctament.');
+      setSaveMessage('Regles de creació, límit i dau virtual desats correctament.');
       router.refresh();
     } catch {
       setError('Error de connexió en desar la configuració.');
@@ -124,7 +128,17 @@ export function CampaignCreationConfigCard({
       <Card
         title="Regles de creació de personatges"
         subtitle="Criteris configurats pel Director de Joc per a aquesta campanya."
-        actions={<ScrollText className="h-4 w-4 text-[var(--rol-accent-gold)]" />}
+        actions={
+          <div className="flex items-center gap-2">
+            <Badge tone={initialVirtualDiceEnabled ? 'success' : 'neutral'}>
+              <Dices className="h-3.5 w-3.5" />
+              {initialVirtualDiceEnabled
+                ? 'Dau virtual: Activat'
+                : 'Dau virtual: Desactivat (daus físics)'}
+            </Badge>
+            <ScrollText className="h-4 w-4 text-[var(--rol-accent-gold)]" />
+          </div>
+        }
       >
         <div className="grid gap-4 text-sm sm:grid-cols-2 lg:grid-cols-4">
           <div>
@@ -199,8 +213,8 @@ export function CampaignCreationConfigCard({
 
   return (
     <Card
-      title="Configuració de creació i límits de personatges"
-      subtitle="Defineix les regles d’inici de la taula i quants personatges pot crear cada jugador."
+      title="Configuració de creació, límits i dau virtual"
+      subtitle="Defineix les regles d’inici de la taula, el màxim de personatges i si les fitxes poden llançar daus virtuals."
       actions={<Badge tone="gold">Editable en qualsevol moment</Badge>}
     >
       <form onSubmit={handleSave} className="space-y-4">
@@ -312,6 +326,26 @@ export function CampaignCreationConfigCard({
             })}
           </div>
         </div>
+
+        <label className="flex items-start gap-3 rounded-[var(--rol-radius-md)] border border-[var(--rol-border-subtle)] bg-[var(--rol-bg-surface-alt)]/50 p-3.5 cursor-pointer">
+          <input
+            type="checkbox"
+            checked={virtualDiceEnabled}
+            onChange={(e) => setVirtualDiceEnabled(e.target.checked)}
+            className="mt-1"
+          />
+          <div>
+            <span className="inline-flex items-center gap-1.5 text-sm font-semibold text-[var(--rol-ink-primary)]">
+              <Dices className="h-4 w-4 text-[var(--rol-accent-primary)]" />
+              Dau virtual integrat a les fitxes
+            </span>
+            <p className="mt-0.5 text-xs text-[var(--rol-ink-secondary)]">
+              Si està activat, els jugadors poden llançar daus d20 amb avantatge o desavantatge
+              directament des de la fitxa. Si està desactivat, només es mostren els modificadors per
+              jugar amb daus físics.
+            </p>
+          </div>
+        </label>
 
         <TextareaField
           label="Restriccions i notes de creació"

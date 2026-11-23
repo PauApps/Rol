@@ -99,7 +99,24 @@ describe('Fase 2: Configuració de creació de personatges, límits i aïllament
       expect(playerDetail.campaign.creationConfig.startingLevel).toBe(3);
       expect(playerDetail.campaign.maxCharactersPerPlayer).toBe(2);
 
-      const createdChar = await createCharacterBase(db, guestCtx, camp.id, { name: 'Sir Bram' });
+      // En mode 'strict', crear sense camps obligatoris (raça, classe, antecedent, història) és rebutjat al servidor
+      await expect(
+        createCharacterBase(db, guestCtx, camp.id, { name: 'Sir Bram' })
+      ).rejects.toMatchObject({ status: 400, code: 'CREATION_RESTRICTION_VIOLATION' });
+
+      const createdChar = await createCharacterBase(db, guestCtx, camp.id, {
+        name: 'Sir Bram',
+        sheetData: {
+          raceAndClass: {
+            race: 'Humà',
+            classes: [{ classId: 'fighter', level: 3 }],
+          },
+          background: {
+            backgroundName: 'Soldat',
+            backstory: 'Cavaller de Cormyr al servei de la Corona.',
+          },
+        },
+      });
       expect((createdChar.sheetData.progression as Record<string, unknown>).totalLevel).toBe(3);
     } finally {
       await close();
