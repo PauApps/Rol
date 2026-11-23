@@ -1,0 +1,77 @@
+[data-theme='fantasy-classic'] {
+  /* Superfícies de pergamí càlid i paper antic */
+  --rol-bg-canvas: #f5efe2;
+  --rol-bg-surface: #fbf7ee;
+  --rol-bg-surface-alt: #efe6d2;
+  --rol-bg-sidebar: #261b16;
+  --rol-bg-sidebar-hover: #352720;
+  --rol-bg-sidebar-active: #463228;
+
+  /* Tinta de lectura amb contrast elevat */
+  --rol-ink-primary: #241a14;
+  --rol-ink-secondary: #5a483a;
+  --rol-ink-muted: #7b6858;
+  --rol-ink-on-dark: #f5ebd6;
+  --rol-ink-on-dark-muted: #cbb99b;
+
+  /* Vores i filets tipogràfics */
+  --rol-border-subtle: #dccfb6;
+  --rol-border-strong: #bfa77c;
+  --rol-border-dark: #3f2f27;
+
+  /* Accents de fantasia refinada */
+  --rol-accent-primary: #7a2323;
+  --rol-accent-primary-hover: #611919;
+  --rol-accent-primary-ink: #fdf9f1;
+  --rol-accent-gold: #a97c2c;
+  --rol-accent-gold-soft: #ead9b3;
+
+  /* Estats semàntics */
+  --rol-status-success-bg: #e5efe4;
+  --rol-status-success-ink: #22542b;
+  --rol-status-success-border: #adc9ab;
+
+  --rol-status-warning-bg: #f7ecd2;
+  --rol-status-warning-ink: #6e4911;
+  --rol-status-warning-border: #d8bc7d;
+
+  --rol-status-danger-bg: #f6e2e0;
+  --rol-status-danger-ink: #7d1f1f;
+  --rol-status-danger-border: #d8a29c;
+
+  --rol-status-neutral-bg: #ebe3d3;
+  --rol-status-neutral-ink: #4d3f34;
+  --rol-status-neutral-border: #cbbca2;
+
+  /* Tipografia */
+  --rol-font-display: 'Palatino Linotype', 'Book Antiqua', Palatino, Georgia, serif;
+  --rol-font-sans: 'Segoe UI', system-ui, -apple-system, BlinkMacSystemFont, Roboto, sans-serif;
+  --rol-font-mono: 'Cascadia Mono', 'Consolas', ui-monospace, monospace;
+
+  /* Ombres i radis */
+  --rol-shadow-card: 0 1px 2px rgba(36, 26, 20, 0.06), 0 6px 20px rgba(68, 49, 34, 0.06);
+  --rol-shadow-modal: 0 18px 48px rgba(24, 15, 10, 0.28);
+  --rol-radius-sm: 0.375rem;
+  --rol-radius-md: 0.625rem;
+  --rol-radius-lg: 0.875rem;
+}
+
+.rol-parchment-canvas {
+  background-color: var(--rol-bg-canvas);
+  background-image:
+    radial-gradient(circle at 18% 12%, rgba(169, 124, 44, 0.08), transparent 42%),
+    radial-gradient(circle at 86% 82%, rgba(122, 35, 35, 0.06), transparent 45%),
+    linear-gradient(180deg, rgba(255, 252, 245, 0.45) 0%, rgba(232, 220, 196, 0.3) 100%);
+}
+
+.rol-card-surface {
+  background-color: var(--rol-bg-surface);
+  border: 1px solid var(--rol-border-subtle);
+  box-shadow: var(--rol-shadow-card);
+  border-radius: var(--rol-radius-lg);
+}
+
+.rol-heading-flourish {
+  font-family: var(--rol-font-display);
+  letter-spacing: 0.01em;
+}

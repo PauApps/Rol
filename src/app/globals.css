@@ -1,0 +1,20 @@
+@import "tailwindcss";
+@import "../themes/fantasy-classic.css";
+
+@layer base {
+  html,
+  body {
+    background-color: var(--rol-bg-canvas);
+    color: var(--rol-ink-primary);
+    font-family: var(--rol-font-sans);
+    -webkit-font-smoothing: antialiased;
+  }
+
+  h1,
+  h2,
+  h3,
+  h4 {
+    font-family: var(--rol-font-display);
+    color: var(--rol-ink-primary);
+  }
+}

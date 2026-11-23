@@ -1,0 +1,23 @@
+# Dependències
+node_modules/
+
+# Compilació Next.js
+.next/
+out/
+next-env.d.ts
+tsconfig.tsbuildinfo
+
+# Dades locals i entorn
+data/
+.env
+.env.local
+.env.*.local
+
+# Cobertura i registres
+coverage/
+*.log
+npm-debug.log*
+
+# Sistema operatiu
+.DS_Store
+Thumbs.db
