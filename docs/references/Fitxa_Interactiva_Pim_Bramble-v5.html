@@ -1,0 +1,1560 @@
+<!DOCTYPE html>
+<html lang="ca">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Fitxa de Personatge D&D 5e — Pim "Fulla-de-Corall" Bramble</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@600;700;800&family=Crimson+Pro:ital,wght@0,400;0,600;0,700;1,400&family=Lato:wght@400;700;900&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --parchment-bg: #1c1713;
+    --parchment-page: #f5eedc;
+    --parchment-card: #fbf7ec;
+    --parchment-tint: #ece1c6;
+    --crimson: #7a1c1c;
+    --crimson-dark: #4f1010;
+    --forest: #244a38;
+    --gold: #b6862c;
+    --gold-bright: #d9a74a;
+    --ink: #221c16;
+    --ink-muted: #5c5043;
+    --border-ornate: #9e8256;
+    --border-soft: #d6c6a5;
+    --shadow-page: 0 12px 40px rgba(0, 0, 0, 0.65);
+    --shadow-card: 0 2px 6px rgba(45, 32, 16, 0.12);
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    padding: 22px 14px 40px;
+    background-color: var(--parchment-bg);
+    background-image:
+      radial-gradient(circle at 20% 15%, rgba(122, 28, 28, 0.22), transparent 45%),
+      radial-gradient(circle at 80% 85%, rgba(36, 74, 56, 0.22), transparent 45%),
+      repeating-linear-gradient(45deg, rgba(255,255,255,0.015) 0px, rgba(255,255,255,0.015) 2px, transparent 2px, transparent 8px);
+    font-family: 'Lato', system-ui, -apple-system, sans-serif;
+    color: var(--ink);
+    line-height: 1.45;
+  }
+
+  .sheet-wrapper {
+    max-width: 1220px;
+    margin: 0 auto;
+    background-color: var(--parchment-page);
+    background-image:
+      radial-gradient(ellipse at top left, rgba(255,255,255,0.55), transparent 60%),
+      radial-gradient(ellipse at bottom right, rgba(182, 134, 44, 0.14), transparent 65%),
+      linear-gradient(to bottom, #f7f1e1 0%, #f1e6cc 100%);
+    border: 3px solid var(--border-ornate);
+    border-radius: 6px;
+    box-shadow: var(--shadow-page), inset 0 0 45px rgba(139, 105, 52, 0.18);
+    padding: 22px 26px 28px;
+    position: relative;
+  }
+
+  .sheet-wrapper::before,
+  .sheet-wrapper::after {
+    content: "❖";
+    position: absolute;
+    font-size: 18px;
+    color: var(--crimson);
+    line-height: 1;
+  }
+  .sheet-wrapper::before { top: 6px; left: 8px; }
+  .sheet-wrapper::after { top: 6px; right: 8px; }
+
+  /* Header Banner */
+  .dnd-banner {
+    display: grid;
+    grid-template-columns: 1.35fr 1fr;
+    gap: 18px;
+    align-items: center;
+    background: linear-gradient(180deg, #fbf6e8 0%, #efe3c6 100%);
+    border: 2px solid var(--crimson);
+    border-radius: 4px;
+    padding: 16px 20px;
+    margin-bottom: 16px;
+    position: relative;
+    box-shadow: var(--shadow-card);
+  }
+  .dnd-banner::after {
+    content: "";
+    position: absolute;
+    left: 12px;
+    right: 12px;
+    bottom: -5px;
+    height: 3px;
+    background: linear-gradient(90deg, transparent, var(--crimson), var(--gold), var(--crimson), transparent);
+  }
+
+  .char-identity-left {
+    border-right: 1.5px solid var(--border-ornate);
+    padding-right: 16px;
+  }
+  .dnd-eyebrow {
+    font-family: 'Cinzel', Georgia, serif;
+    font-size: 0.72rem;
+    font-weight: 800;
+    letter-spacing: 2.2px;
+    text-transform: uppercase;
+    color: var(--crimson);
+    margin-bottom: 3px;
+  }
+  .char-name {
+    font-family: 'Cinzel', Georgia, serif;
+    font-size: 1.85rem;
+    font-weight: 800;
+    color: var(--ink);
+    margin: 0 0 6px 0;
+    line-height: 1.15;
+    text-shadow: 0 1px 0 rgba(255,255,255,0.8);
+  }
+  .char-meta-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 6px 14px;
+    font-size: 0.84rem;
+  }
+  .meta-field {
+    border-bottom: 1px solid var(--border-ornate);
+    padding-bottom: 2px;
+  }
+  .meta-label {
+    font-family: 'Cinzel', Georgia, serif;
+    font-size: 0.64rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.7px;
+    color: var(--ink-muted);
+    display: block;
+  }
+  .meta-value {
+    font-family: 'Crimson Pro', Georgia, serif;
+    font-size: 1.02rem;
+    font-weight: 700;
+    color: var(--ink);
+  }
+
+  .banner-actions {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    justify-content: space-between;
+    gap: 10px;
+  }
+  .level-crest {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    background: var(--crimson);
+    color: #fbf6e8;
+    padding: 8px 16px;
+    border-radius: 4px;
+    border: 1.5px solid var(--gold-bright);
+    box-shadow: 0 2px 6px rgba(0,0,0,0.2);
+  }
+  .level-crest .lvl-num {
+    font-family: 'Cinzel', Georgia, serif;
+    font-size: 1.65rem;
+    font-weight: 800;
+    color: var(--gold-bright);
+    line-height: 1;
+  }
+  .level-crest .lvl-text {
+    font-family: 'Cinzel', Georgia, serif;
+    font-size: 0.72rem;
+    letter-spacing: 0.8px;
+    text-transform: uppercase;
+  }
+  .action-buttons {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+  }
+  .dnd-btn {
+    font-family: 'Cinzel', Georgia, serif;
+    font-size: 0.76rem;
+    font-weight: 700;
+    letter-spacing: 0.5px;
+    padding: 7px 12px;
+    border-radius: 4px;
+    cursor: pointer;
+    border: 1.5px solid var(--border-ornate);
+    background: var(--parchment-card);
+    color: var(--ink);
+    transition: all 0.15s;
+  }
+  .dnd-btn:hover {
+    background: var(--parchment-tint);
+    border-color: var(--crimson);
+  }
+  .dnd-btn-primary {
+    background: var(--forest);
+    color: #fff;
+    border-color: #193528;
+  }
+  .dnd-btn-primary:hover { background: #1b382a; }
+  .dnd-btn-gold {
+    background: linear-gradient(180deg, #e5b84b 0%, #c49026 100%);
+    color: #1d1508;
+    border-color: #8c6214;
+  }
+  .dnd-btn-gold:hover { background: #eab948; }
+
+  @media (max-width: 860px) {
+    .dnd-banner { grid-template-columns: 1fr; }
+    .char-identity-left { border-right: none; border-bottom: 1.5px solid var(--border-ornate); padding-right: 0; padding-bottom: 12px; }
+    .banner-actions { align-items: flex-start; }
+  }
+
+  /* Navigation Tabs */
+  .book-tabs {
+    display: flex;
+    gap: 6px;
+    border-bottom: 2px solid var(--crimson);
+    margin-bottom: 18px;
+    flex-wrap: wrap;
+  }
+  .book-tab {
+    font-family: 'Cinzel', Georgia, serif;
+    font-size: 0.84rem;
+    font-weight: 700;
+    letter-spacing: 0.4px;
+    padding: 9px 16px;
+    background: var(--parchment-tint);
+    color: var(--ink-muted);
+    border: 1.5px solid var(--border-ornate);
+    border-bottom: none;
+    border-radius: 6px 6px 0 0;
+    cursor: pointer;
+    transition: all 0.15s;
+    position: relative;
+    top: 2px;
+  }
+  .book-tab:hover { color: var(--crimson); background: var(--parchment-card); }
+  .book-tab.active {
+    background: var(--crimson);
+    color: #fbf6e8;
+    border-color: var(--crimson);
+  }
+  .tab-panel { display: none; }
+  .tab-panel.active { display: block; }
+
+  /* Top Combat Vitals Row */
+  .vitals-row {
+    display: grid;
+    grid-template-columns: repeat(6, 1fr);
+    gap: 12px;
+    margin-bottom: 18px;
+  }
+  @media (max-width: 960px) { .vitals-row { grid-template-columns: repeat(3, 1fr); } }
+  @media (max-width: 540px) { .vitals-row { grid-template-columns: repeat(2, 1fr); } }
+
+  .vital-box {
+    background: var(--parchment-card);
+    border: 1.5px solid var(--border-ornate);
+    border-radius: 5px;
+    padding: 10px 8px 8px;
+    text-align: center;
+    box-shadow: var(--shadow-card);
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+  }
+  .vital-box.shield-box {
+    border: 2px solid var(--crimson);
+    border-radius: 6px 6px 26px 26px;
+    background: linear-gradient(180deg, #fffdf8 0%, #f1e5c8 100%);
+  }
+  .vital-box.hp-box {
+    border: 2px solid var(--forest);
+    background: linear-gradient(180deg, #f8fcf9 0%, #e6f0ea 100%);
+  }
+  .vital-title {
+    font-family: 'Cinzel', Georgia, serif;
+    font-size: 0.65rem;
+    font-weight: 800;
+    text-transform: uppercase;
+    letter-spacing: 0.6px;
+    color: var(--ink-muted);
+    margin-bottom: 4px;
+  }
+  .vital-number {
+    font-family: 'Cinzel', Georgia, serif;
+    font-size: 1.7rem;
+    font-weight: 800;
+    color: var(--crimson);
+    line-height: 1.1;
+  }
+  .vital-sub {
+    font-size: 0.72rem;
+    color: var(--ink-muted);
+    margin-top: 3px;
+  }
+
+  .hp-control-row {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 5px;
+    margin: 2px 0;
+  }
+  .hp-input {
+    width: 48px;
+    text-align: center;
+    font-family: 'Cinzel', Georgia, serif;
+    font-size: 1.35rem;
+    font-weight: 800;
+    color: var(--forest);
+    background: #fff;
+    border: 1.5px solid var(--forest);
+    border-radius: 4px;
+    padding: 1px 2px;
+  }
+  .step-btn {
+    width: 24px;
+    height: 24px;
+    border-radius: 4px;
+    border: 1px solid var(--forest);
+    background: var(--forest);
+    color: #fff;
+    font-weight: 800;
+    cursor: pointer;
+    font-size: 0.9rem;
+    line-height: 1;
+  }
+  .step-btn:hover { background: #183326; }
+  .temp-input {
+    width: 34px;
+    text-align: center;
+    font-weight: 700;
+    font-size: 0.75rem;
+    border: 1px solid var(--border-ornate);
+    border-radius: 3px;
+    background: #fff;
+  }
+
+  /* Three-Column Official D&D Layout */
+  .dnd-columns {
+    display: grid;
+    grid-template-columns: 114px 295px 1fr;
+    gap: 16px;
+    align-items: start;
+  }
+  @media (max-width: 980px) {
+    .dnd-columns { grid-template-columns: 1fr; }
+    .abilities-rack { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+  }
+
+  .abilities-rack {
+    display: flex;
+    flex-direction: column;
+    gap: 11px;
+  }
+  .stat-plaque {
+    background: linear-gradient(180deg, #fdfaf2 0%, #efe3c8 100%);
+    border: 1.5px solid var(--border-ornate);
+    border-radius: 8px;
+    padding: 8px 6px 11px;
+    text-align: center;
+    box-shadow: var(--shadow-card);
+  }
+  .stat-plaque.primary-stat {
+    border: 2px solid var(--crimson);
+    background: linear-gradient(180deg, #fffaf5 0%, #f3dfc8 100%);
+  }
+  .stat-plaque-label {
+    font-family: 'Cinzel', Georgia, serif;
+    font-size: 0.65rem;
+    font-weight: 800;
+    letter-spacing: 0.6px;
+    text-transform: uppercase;
+    color: var(--ink);
+  }
+  .stat-plaque.primary-stat .stat-plaque-label { color: var(--crimson); }
+  .stat-plaque-mod {
+    font-family: 'Cinzel', Georgia, serif;
+    font-size: 1.55rem;
+    font-weight: 800;
+    color: var(--ink);
+    margin: 3px 0 4px;
+    line-height: 1;
+  }
+  .stat-plaque-oval {
+    display: inline-block;
+    min-width: 44px;
+    padding: 2px 10px;
+    background: #fffdf8;
+    border: 1.5px solid var(--border-ornate);
+    border-radius: 999px;
+    font-family: 'Cinzel', Georgia, serif;
+    font-size: 0.85rem;
+    font-weight: 700;
+    color: var(--ink);
+    box-shadow: inset 0 1px 3px rgba(0,0,0,0.1);
+  }
+
+  .dnd-box {
+    background: var(--parchment-card);
+    border: 1.5px solid var(--border-ornate);
+    border-radius: 5px;
+    padding: 13px 15px;
+    margin-bottom: 14px;
+    box-shadow: var(--shadow-card);
+  }
+  .dnd-box-header {
+    font-family: 'Cinzel', Georgia, serif;
+    font-size: 0.88rem;
+    font-weight: 800;
+    text-transform: uppercase;
+    letter-spacing: 0.8px;
+    color: var(--crimson);
+    border-bottom: 2px solid var(--crimson);
+    padding-bottom: 4px;
+    margin: 0 0 10px 0;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+
+  .profs-list { list-style: none; margin: 0; padding: 0; }
+  .prof-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 4px 4px;
+    border-bottom: 1px solid rgba(158, 130, 86, 0.22);
+    font-size: 0.84rem;
+  }
+  .prof-row:last-child { border-bottom: none; }
+  .prof-row.proficient {
+    background: rgba(122, 28, 28, 0.06);
+    border-radius: 3px;
+  }
+  .prof-name-wrap { display: flex; align-items: center; gap: 8px; }
+  .pip {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    border: 1.5px solid var(--crimson);
+    display: inline-block;
+    flex-shrink: 0;
+  }
+  .pip.filled {
+    background: var(--crimson);
+    box-shadow: 0 0 0 1.5px #fbf7ec inset;
+  }
+  .abbr { font-size: 0.72rem; color: var(--ink-muted); font-style: italic; }
+  .bonus-num {
+    font-family: 'Cinzel', Georgia, serif;
+    font-weight: 700;
+    font-size: 0.88rem;
+    color: var(--ink);
+    border-bottom: 1px solid var(--border-ornate);
+    min-width: 26px;
+    text-align: center;
+  }
+
+  .dnd-table { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
+  .dnd-table thead th {
+    font-family: 'Cinzel', Georgia, serif;
+    font-size: 0.7rem;
+    font-weight: 800;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: var(--crimson);
+    text-align: left;
+    padding: 6px 8px;
+    border-bottom: 1.5px solid var(--crimson);
+    background: rgba(122, 28, 28, 0.05);
+  }
+  .dnd-table tbody tr:nth-child(even) { background: rgba(236, 225, 198, 0.45); }
+  .dnd-table tbody td {
+    padding: 7px 8px;
+    border-bottom: 1px solid var(--border-soft);
+    vertical-align: top;
+  }
+
+  .die-tag {
+    display: inline-block;
+    font-family: 'Cinzel', Georgia, serif;
+    font-size: 0.72rem;
+    font-weight: 700;
+    padding: 2px 7px;
+    border-radius: 3px;
+    border: 1px solid var(--crimson);
+    background: #fff8f6;
+    color: var(--crimson);
+    white-space: nowrap;
+  }
+  .die-tag.dmg { border-color: var(--gold); background: #fdf8ea; color: #7d5812; }
+  .die-tag.nature { border-color: var(--forest); background: #eff7f3; color: var(--forest); }
+
+  .trait-entry {
+    margin-bottom: 9px;
+    padding-bottom: 8px;
+    border-bottom: 1px solid var(--border-soft);
+    font-family: 'Crimson Pro', Georgia, serif;
+    font-size: 1.02rem;
+    line-height: 1.38;
+  }
+  .trait-entry:last-child { border-bottom: none; margin-bottom: 0; padding-bottom: 0; }
+  .trait-lead {
+    font-family: 'Lato', sans-serif;
+    font-weight: 900;
+    font-style: italic;
+    font-size: 0.88rem;
+    color: var(--crimson);
+  }
+
+  .arcane-tracker {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: space-between;
+    align-items: center;
+    gap: 14px;
+    background: linear-gradient(90deg, #f3e8ce 0%, #eae0c9 100%);
+    border: 1.5px solid var(--border-ornate);
+    border-radius: 5px;
+    padding: 10px 14px;
+    margin-bottom: 14px;
+  }
+  .tracker-cluster {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+    font-family: 'Cinzel', Georgia, serif;
+    font-size: 0.82rem;
+    font-weight: 700;
+    color: var(--ink);
+  }
+  .rune-check {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    background: #fffdf8;
+    border: 1px solid var(--crimson);
+    padding: 4px 9px;
+    border-radius: 4px;
+    cursor: pointer;
+    font-family: 'Lato', sans-serif;
+    font-size: 0.82rem;
+  }
+  .rune-check input { accent-color: var(--crimson); width: 15px; height: 15px; cursor: pointer; }
+
+  .split-two { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  @media (max-width: 780px) { .split-two { grid-template-columns: 1fr; } }
+
+  .pouch-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 8px; }
+  .coin-slot {
+    background: linear-gradient(180deg, #fdfaf2 0%, #ede0c2 100%);
+    border: 1.5px solid var(--border-ornate);
+    border-radius: 5px;
+    padding: 8px 4px;
+    text-align: center;
+  }
+  .coin-slot.gold-slot {
+    border: 2px solid var(--gold);
+    background: linear-gradient(180deg, #fffdf4 0%, #f6e7bd 100%);
+  }
+  .coin-label {
+    font-family: 'Cinzel', Georgia, serif;
+    font-size: 0.75rem;
+    font-weight: 800;
+    color: var(--crimson);
+    display: block;
+    margin-bottom: 4px;
+  }
+  .coin-slot input {
+    width: 85%;
+    text-align: center;
+    font-family: 'Cinzel', Georgia, serif;
+    font-size: 1rem;
+    font-weight: 800;
+    border: 1px solid var(--border-ornate);
+    border-radius: 3px;
+    background: #fff;
+    padding: 3px;
+  }
+
+  .lore-prose {
+    font-family: 'Crimson Pro', Georgia, serif;
+    font-size: 1.08rem;
+    line-height: 1.52;
+    color: var(--ink);
+  }
+  .lore-prose p:first-of-type::first-letter {
+    font-family: 'Cinzel', Georgia, serif;
+    font-size: 2.6rem;
+    font-weight: 800;
+    float: left;
+    line-height: 0.85;
+    padding-right: 8px;
+    padding-top: 3px;
+    color: var(--crimson);
+  }
+  .parchment-textarea {
+    width: 100%;
+    min-height: 150px;
+    background: #fffdf7;
+    border: 1.5px solid var(--border-ornate);
+    border-radius: 4px;
+    padding: 10px 12px;
+    font-family: 'Crimson Pro', Georgia, serif;
+    font-size: 1.05rem;
+    color: var(--ink);
+    resize: vertical;
+    line-height: 1.45;
+  }
+  .parchment-textarea:focus { outline: none; border-color: var(--crimson); }
+
+  /* Level-Up Panel Specific Styles */
+  .lvl-control-card {
+    background: linear-gradient(180deg, #fbf6e8 0%, #efe2c4 100%);
+    border: 2px solid var(--gold);
+    border-radius: 6px;
+    padding: 14px 16px;
+    margin-bottom: 16px;
+  }
+  .lvl-grid-controls {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+    gap: 12px;
+    margin-top: 10px;
+  }
+  .lvl-field-box {
+    background: #fffdf8;
+    border: 1px solid var(--border-ornate);
+    border-radius: 5px;
+    padding: 10px;
+  }
+  .lvl-field-box label {
+    display: block;
+    font-family: 'Cinzel', Georgia, serif;
+    font-size: 0.72rem;
+    font-weight: 800;
+    color: var(--crimson);
+    text-transform: uppercase;
+    margin-bottom: 5px;
+  }
+  .lvl-field-box select,
+  .lvl-field-box input {
+    width: 100%;
+    padding: 6px 8px;
+    font-family: 'Lato', sans-serif;
+    font-weight: 700;
+    font-size: 0.92rem;
+    border: 1.5px solid var(--border-ornate);
+    border-radius: 4px;
+    background: #fff;
+  }
+  .stat-adjust-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 6px 8px;
+    border-bottom: 1px solid var(--border-soft);
+  }
+  .stat-adjust-row:last-child { border-bottom: none; }
+  .stat-adjust-btns {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .milestone-card {
+    border-left: 4px solid var(--border-ornate);
+    padding: 8px 12px;
+    margin-bottom: 10px;
+    background: #fffdf8;
+    border-radius: 0 4px 4px 0;
+  }
+  .milestone-card.unlocked {
+    border-left-color: var(--forest);
+    background: #f3faf6;
+  }
+  .milestone-card.locked {
+    opacity: 0.65;
+  }
+  .spell-add-form {
+    display: grid;
+    grid-template-columns: 75px 1.3fr 1fr 1fr 1.6fr auto;
+    gap: 6px;
+    margin-top: 12px;
+    padding-top: 10px;
+    border-top: 1.5px dashed var(--border-ornate);
+  }
+  @media (max-width: 820px) { .spell-add-form { grid-template-columns: 1fr; } }
+  .spell-add-form input, .spell-add-form select {
+    padding: 6px 8px;
+    border: 1px solid var(--border-ornate);
+    border-radius: 4px;
+    font-size: 0.83rem;
+  }
+  .del-spell-btn {
+    background: #8c2323;
+    color: #fff;
+    border: none;
+    border-radius: 3px;
+    padding: 2px 7px;
+    cursor: pointer;
+    font-size: 0.75rem;
+  }
+
+  @media print {
+    body { background: #fff; padding: 0; }
+    .sheet-wrapper { box-shadow: none; border: 1px solid #999; }
+    .action-buttons, .book-tabs, .spell-add-form, .del-spell-btn { display: none !important; }
+    .tab-panel { display: block !important; page-break-inside: avoid; margin-bottom: 16px; }
+  }
+</style>
+</head>
+<body>
+
+<div class="sheet-wrapper">
+  <!-- D&D CHARACTER HEADER BANNER -->
+  <header class="dnd-banner">
+    <div class="char-identity-left">
+      <div class="dnd-eyebrow">Dungeons &amp; Dragons 5a Edició · Cròniques d'Aetheris</div>
+      <h1 class="char-name">Pim "Fulla-de-Corall" Bramble</h1>
+      <div class="char-meta-grid">
+        <div class="meta-field">
+          <span class="meta-label">Classe i Subclasse</span>
+          <span class="meta-value" id="hdr-subclass">Druida (Cercle Estrelles al niv. 3)</span>
+        </div>
+        <div class="meta-field">
+          <span class="meta-label">Rerefons</span>
+          <span class="meta-value">Guia (Foraster)</span>
+        </div>
+        <div class="meta-field">
+          <span class="meta-label">Espècie / Raça</span>
+          <span class="meta-value">Gnom del bosc</span>
+        </div>
+        <div class="meta-field">
+          <span class="meta-label">Alineament i Punts d'Exp.</span>
+          <span class="meta-value">Neutral Bo · <span id="hdr-xp">0</span> PX</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="banner-actions">
+      <div class="level-crest">
+        <div class="lvl-num" id="hdr-level">1</div>
+        <div class="lvl-text">Nivell Druida<br>Daus de Cop: <span id="hdr-hitdice">1d8</span></div>
+      </div>
+      <div class="action-buttons">
+        <button class="dnd-btn dnd-btn-gold" onclick="openTab('panel-levelup', document.getElementById('tab-btn-lvl'))">⬆️ Pujar de Nivell</button>
+        <button class="dnd-btn dnd-btn-primary" onclick="longRest()">🏕️ Descans Llarg</button>
+        <button class="dnd-btn" onclick="window.print()">🖨️ Imprimir</button>
+        <button class="dnd-btn" onclick="resetSheet()">↺ Reiniciar</button>
+      </div>
+    </div>
+  </header>
+
+  <!-- CHAPTER TABS -->
+  <nav class="book-tabs">
+    <button class="book-tab active" onclick="openTab('panel-combat', this)">⚔️ Característiques i Combat</button>
+    <button class="book-tab" onclick="openTab('panel-magic', this)">✨ Grimori i Conjurs</button>
+    <button class="book-tab" onclick="openTab('panel-gear', this)">🎒 Equipament i Bossa</button>
+    <button class="book-tab" onclick="openTab('panel-lore', this)">📜 Història i Diari</button>
+    <button class="book-tab" id="tab-btn-lvl" onclick="openTab('panel-levelup', this)">⬆️ Gestió de Nivell i Evolució</button>
+  </nav>
+
+  <!-- TOP COMBAT VITALS -->
+  <section class="vitals-row">
+    <div class="vital-box shield-box">
+      <div class="vital-title">Classe d'Armadura</div>
+      <div class="vital-number" id="val-ac">15</div>
+      <div class="vital-sub" id="sub-ac">Cuir (11) + Des (+2) + Escut (+2)</div>
+    </div>
+
+    <div class="vital-box hp-box">
+      <div class="vital-title">Punts de Cop (Màx. <span id="val-hp-max">10</span>)</div>
+      <div class="hp-control-row">
+        <button class="step-btn" onclick="changeHP(-1)">−</button>
+        <input type="number" id="hp-curr" class="hp-input" value="10" min="0" max="250" onchange="saveState()">
+        <button class="step-btn" onclick="changeHP(1)">+</button>
+      </div>
+      <div class="vital-sub">PG Temp: <input type="number" id="hp-temp" class="temp-input" value="0" min="0" onchange="saveState()"></div>
+    </div>
+
+    <div class="vital-box">
+      <div class="vital-title">Iniciativa</div>
+      <div class="vital-number" id="val-init">+2</div>
+      <div class="vital-sub"><span class="die-tag" id="die-init">1d20 + 2</span></div>
+    </div>
+
+    <div class="vital-box">
+      <div class="vital-title">Velocitat / Mida</div>
+      <div class="vital-number">7,5 m</div>
+      <div class="vital-sub">25 peus · Petita (P)</div>
+    </div>
+
+    <div class="vital-box">
+      <div class="vital-title">Bonif. Competència</div>
+      <div class="vital-number" id="val-prof">+2</div>
+      <div class="vital-sub">Nivell <span id="sub-lvl">1</span></div>
+    </div>
+
+    <div class="vital-box">
+      <div class="vital-title">Percepció Passiva</div>
+      <div class="vital-number" id="val-pp">14</div>
+      <div class="vital-sub">Visió foscor 18 m</div>
+    </div>
+  </section>
+
+  <!-- PANEL 1: COMBAT & ABILITIES -->
+  <div id="panel-combat" class="tab-panel active">
+    <div class="dnd-columns">
+      <!-- LEFT: 6 ABILITY PLAQUES -->
+      <div class="abilities-rack">
+        <div class="stat-plaque">
+          <div class="stat-plaque-label">Força</div>
+          <div class="stat-plaque-mod" id="mod-str">-1</div>
+          <div class="stat-plaque-oval" id="score-str">8</div>
+        </div>
+        <div class="stat-plaque">
+          <div class="stat-plaque-label">Destresa</div>
+          <div class="stat-plaque-mod" id="mod-dex">+2</div>
+          <div class="stat-plaque-oval" id="score-dex">14</div>
+        </div>
+        <div class="stat-plaque">
+          <div class="stat-plaque-label">Constitució</div>
+          <div class="stat-plaque-mod" id="mod-con">+2</div>
+          <div class="stat-plaque-oval" id="score-con">14</div>
+        </div>
+        <div class="stat-plaque">
+          <div class="stat-plaque-label">Intel·ligència</div>
+          <div class="stat-plaque-mod" id="mod-int">+1</div>
+          <div class="stat-plaque-oval" id="score-int">12</div>
+        </div>
+        <div class="stat-plaque primary-stat">
+          <div class="stat-plaque-label">Saviesa ★</div>
+          <div class="stat-plaque-mod" id="mod-wis">+2</div>
+          <div class="stat-plaque-oval" id="score-wis">15</div>
+        </div>
+        <div class="stat-plaque">
+          <div class="stat-plaque-label">Carisma</div>
+          <div class="stat-plaque-mod" id="mod-cha">+0</div>
+          <div class="stat-plaque-oval" id="score-cha">10</div>
+        </div>
+      </div>
+
+      <!-- CENTER: SAVES & SKILLS -->
+      <div>
+        <div class="dnd-box">
+          <h2 class="dnd-box-header">Tirades de Salvació</h2>
+          <ul class="profs-list" id="saves-list"></ul>
+        </div>
+
+        <div class="dnd-box">
+          <h2 class="dnd-box-header">Habilitats</h2>
+          <ul class="profs-list" id="skills-list"></ul>
+        </div>
+      </div>
+
+      <!-- RIGHT: ATTACKS & FEATURES -->
+      <div>
+        <div class="dnd-box">
+          <h2 class="dnd-box-header">Atacs i Trucs de Combat</h2>
+          <table class="dnd-table">
+            <thead>
+              <tr>
+                <th>Arma o Truc</th>
+                <th>Tirada d'Atac</th>
+                <th>Dau de Dany</th>
+                <th>Abast i Propietats</th>
+              </tr>
+            </thead>
+            <tbody id="attacks-tbody"></tbody>
+          </table>
+        </div>
+
+        <div class="dnd-box">
+          <h2 class="dnd-box-header">Trets de Classe, Espècie i Rerefons</h2>
+          <div id="features-container"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- PANEL 2: GRIMOIRE / SPELLS -->
+  <div id="panel-magic" class="tab-panel">
+    <div class="vitals-row" style="grid-template-columns: repeat(4, 1fr);">
+      <div class="vital-box">
+        <div class="vital-title">Aptitud Màgica</div>
+        <div class="vital-number" style="font-size:1.35rem;">Saviesa</div>
+        <div class="vital-sub">Modificador <span id="mag-wis-mod">+2</span></div>
+      </div>
+      <div class="vital-box">
+        <div class="vital-title">CD Salvació Conjurs</div>
+        <div class="vital-number" id="mag-dc">12</div>
+        <div class="vital-sub" id="mag-dc-formula">8 + 2 (Comp) + 2 (Sav)</div>
+      </div>
+      <div class="vital-box">
+        <div class="vital-title">Bonif. Atac Conjurs</div>
+        <div class="vital-number" id="mag-atk">+4</div>
+        <div class="vital-sub"><span class="die-tag" id="mag-atk-die">1d20 + 4</span></div>
+      </div>
+      <div class="vital-box">
+        <div class="vital-title">Conjurs Preparats</div>
+        <div class="vital-number" id="mag-prep">3 / dia</div>
+        <div class="vital-sub">+ Hablar con animales</div>
+      </div>
+    </div>
+
+    <div class="arcane-tracker" id="slots-tracker-bar"></div>
+
+    <div class="dnd-box">
+      <h2 class="dnd-box-header">Grimori de Trucs i Conjurs Preparats</h2>
+      <table class="dnd-table">
+        <thead>
+          <tr>
+            <th>Nivell</th>
+            <th>Nom del Conjur</th>
+            <th>Temps / Abast</th>
+            <th>Comp. / Durada</th>
+            <th>Efecte i Daus</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody id="spells-tbody"></tbody>
+      </table>
+
+      <!-- Form to add new spells when leveling up -->
+      <div class="spell-add-form">
+        <select id="new-spell-lvl">
+          <option value="Truc (0)">Truc (0)</option>
+          <option value="Nivell 1" selected>Nivell 1</option>
+          <option value="Nivell 2">Nivell 2</option>
+          <option value="Nivell 3">Nivell 3</option>
+          <option value="Nivell 4">Nivell 4</option>
+          <option value="Nivell 5">Nivell 5</option>
+        </select>
+        <input type="text" id="new-spell-name" placeholder="Nom del conjur (ex: Rayo de luna)">
+        <input type="text" id="new-spell-cast" placeholder="Temps / Abast (ex: 1 Acció · 36 m)">
+        <input type="text" id="new-spell-dur" placeholder="Comp. / Durada (ex: C · 1 min)">
+        <input type="text" id="new-spell-desc" placeholder="Efecte i daus (ex: 2d10 radiant, Salv. Con)">
+        <button class="dnd-btn dnd-btn-primary" onclick="addCustomSpell()">+ Afegir Conjur</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- PANEL 3: GEAR & COINS -->
+  <div id="panel-gear" class="tab-panel">
+    <div class="split-two">
+      <div class="dnd-box">
+        <h2 class="dnd-box-header">Equipament Inicial (Paquet Predefinit)</h2>
+        <table class="dnd-table">
+          <thead>
+            <tr>
+              <th>Objecte</th>
+              <th>Descripció i Regles</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr><td><strong>Armadura de cuir</strong></td><td>CA base 11 + modificador de Destresa. Sense metall.</td></tr>
+            <tr><td><strong>Escut de fusta</strong></td><td>+2 a la Classe d'Armadura.</td></tr>
+            <tr><td><strong>Bastó de fusta</strong></td><td>Canalitzador druídic (substitueix components materials sense cost).</td></tr>
+            <tr><td><strong>Falç (Hoz)</strong></td><td>Arma senzilla lleugera (1d4 + For tallant).</td></tr>
+            <tr><td><strong>Estris d'herborista</strong></td><td>Per identificar plantes i elaborar pocions de curació o antitoxines.</td></tr>
+            <tr><td><strong>Eines de cartògraf</strong></td><td>Del rerefons de Guia; per dibuixar i interpretar mapes.</td></tr>
+            <tr><td><strong>Paquet d'explorador</strong></td><td>Motxilla, màrfega, estris per fer foc, 10 torxes, 10 racions veganes, cantimplora i 15 metres de corda de cànem.</td></tr>
+            <tr><td><strong>Roba de viatge</strong></td><td>Robes naturals amb detalls d'esculls i fulles de tardor, i sarró.</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div>
+        <div class="dnd-box">
+          <h2 class="dnd-box-header">Bossa de Monedes</h2>
+          <div class="pouch-grid">
+            <div class="coin-slot"><span class="coin-label">PC</span><input type="number" id="coin-pc" value="0" min="0" onchange="saveState()"></div>
+            <div class="coin-slot"><span class="coin-label">PP</span><input type="number" id="coin-pp" value="0" min="0" onchange="saveState()"></div>
+            <div class="coin-slot"><span class="coin-label">PE</span><input type="number" id="coin-pe" value="0" min="0" onchange="saveState()"></div>
+            <div class="coin-slot gold-slot"><span class="coin-label">PO</span><input type="number" id="coin-po" value="9" min="0" onchange="saveState()"></div>
+            <div class="coin-slot"><span class="coin-label">PPT</span><input type="number" id="coin-ppt" value="0" min="0" onchange="saveState()"></div>
+          </div>
+        </div>
+
+        <div class="dnd-box">
+          <h2 class="dnd-box-header">Inventari Extra i Tresors</h2>
+          <textarea id="extra-gear" class="parchment-textarea" placeholder="Apunta aquí els nous objectes, pocions (com el Mapa Estel·lar al nivell 3) o tresors que aconsegueixis a Aetheris..." onchange="saveState()"></textarea>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- PANEL 4: LORE & SESSION NOTES -->
+  <div id="panel-lore" class="tab-panel">
+    <div class="split-two">
+      <div class="dnd-box">
+        <h2 class="dnd-box-header">Crònica d'en Pim "Fulla-de-Corall" Bramble</h2>
+        <div class="lore-prose">
+          <p>
+            Criat lluny del brogit de les grans ciutats, als boscos i esculls de les <strong>Illes Druidan</strong>, en Pim va créixer com a guia sota la llei d'aïllament absolut del <strong>Consell dels Mars</strong>, que prohibeix qualsevol contacte amb els habitants dels continents mortals.
+          </p>
+          <p>
+            Després d'una tempesta ferotge, va trobar un nàufrag mortal arrossegat a les costes. Incapaç de deixar-lo morir com exigia la llei, el va curar d'amagat i el va guiar entre els esculls cap a aigües segures. Descobert pel Consell, va fugir en una petita barca de fusta demanant ajuda als <strong>peixos</strong>, que el van guiar pels corrents fins a la costa sud d'<strong>Elyndra</strong>, prop de Valenhold.
+          </p>
+          <p>
+            Un cop al continent, es va colar com a polissó en un vaixell mercant fins a <strong>Port Blanc</strong>. Va desembarcar exhaust, deshidratat i famolenc, fins que una dona amb túnica verda i daurada i una trena castanya el va cuidar als molls sense fer preguntes incòmodes. Sense saber que és la sanadora <strong>Caterina Soldevila</strong>, en Pim la recorda afectuosament com <em>"sa Trena Quejuda"</em>.
+          </p>
+        </div>
+      </div>
+
+      <div class="dnd-box">
+        <h2 class="dnd-box-header">Diari d'Aventures i Notes de Sessió</h2>
+        <textarea id="session-notes" class="parchment-textarea" style="min-height: 270px;" placeholder="Escriu aquí noms de personatges, pistes, missions a Port Blanc o notes de cada sessió (es guarda automàticament al teu navegador)..." onchange="saveState()"></textarea>
+      </div>
+    </div>
+  </div>
+
+  <!-- PANEL 5: LEVEL UP & PROGRESSION -->
+  <div id="panel-levelup" class="tab-panel">
+    <div class="lvl-control-card">
+      <h2 class="dnd-box-header" style="margin-bottom:6px;">Gestor de Nivell, Punts d'Experiència i Punts de Cop</h2>
+      <p style="font-size:0.86rem;color:var(--ink-muted);margin:0 0 8px 0;">
+        Quan el teu GM (Albert) et digui que puges de nivell, canvia el selector de nivell aquí sota: la fitxa recalcularà automàticament el <strong>bonificador per competència</strong>, els <strong>espais de conjur</strong>, el límit de <strong>conjurs preparats</strong> i desbloquejarà els nous trets de Druida!
+      </p>
+      <div class="lvl-grid-controls">
+        <div class="lvl-field-box">
+          <label>Nivell Actual de Druida</label>
+          <select id="ctrl-level" onchange="onLevelChange()">
+            <option value="1">Nivell 1 (0 PX · Comp. +2)</option>
+            <option value="2">Nivell 2 (300 PX · Forma Salvatge)</option>
+            <option value="3">Nivell 3 (900 PX · Cercle Estrelles!)</option>
+            <option value="4">Nivell 4 (2.700 PX · Millora Caract./Dote)</option>
+            <option value="5">Nivell 5 (6.500 PX · Comp. +3 · Niv. 3 Conj.)</option>
+            <option value="6">Nivell 6 (14.000 PX · Presagi Còsmic)</option>
+            <option value="7">Nivell 7 (23.000 PX · Niv. 4 Conjurs)</option>
+            <option value="8">Nivell 8 (34.000 PX · Millora Caract./Dote)</option>
+            <option value="9">Nivell 9 (48.000 PX · Comp. +4 · Niv. 5 Conj.)</option>
+            <option value="10">Nivell 10 (64.000 PX · Constel·lacions Mill.)</option>
+          </select>
+        </div>
+
+        <div class="lvl-field-box">
+          <label>Punts d'Experiència (PX)</label>
+          <input type="number" id="ctrl-xp" value="0" min="0" step="50" onchange="saveState(); renderAll();">
+        </div>
+
+        <div class="lvl-field-box">
+          <label>Punts de Cop Màxims Totals</label>
+          <div style="display:flex;gap:6px;">
+            <input type="number" id="ctrl-hp-max" value="10" min="1" max="300" onchange="saveState(); renderAll();">
+            <button class="dnd-btn dnd-btn-primary" style="white-space:nowrap;padding:4px 8px;" onclick="addFixedLevelHP()" title="Suma 5 + Mod. Constitució (mitjana oficial de Druida)">+Mitjana nivell</button>
+          </div>
+          <small style="font-size:0.72rem;color:var(--ink-muted);">Al pujar de nivell: tira 1d8 + Con (o prem +Mitjana: 5 + Con).</small>
+        </div>
+      </div>
+    </div>
+
+    <div class="split-two">
+      <!-- Left: Ability Score Increases (Levels 4, 8, 12...) -->
+      <div class="dnd-box">
+        <h2 class="dnd-box-header">Puntuacions de Característica (Millores Niv. 4 / 8)</h2>
+        <p style="font-size:0.83rem;color:var(--ink-muted);margin-top:0;">
+          Als nivells <strong>4</strong> i <strong>8</strong> pots sumar <strong>+2 punts</strong> a una característica (o <strong>+1 a dues</strong>, màxim 20). Recomanat: pujar <strong>Saviesa</strong> a 16 (+3) o desenvolupar el <strong>Carisma</strong> d'en Pim!
+        </p>
+        <div id="ability-adjuster-list"></div>
+      </div>
+
+      <!-- Right: Druid & Circle of the Stars Roadmap -->
+      <div class="dnd-box">
+        <h2 class="dnd-box-header">Full de Ruta: Druida i Cercle de les Estrelles</h2>
+        <div id="roadmap-list"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+  const STORAGE_KEY = 'pim_bramble_dnd5e_sheet_v4';
+
+  // Official Druid Spell Slots Table (Levels 1 to 10)
+  const DRUID_SLOTS = {
+    1:  [2, 0, 0, 0, 0],
+    2:  [3, 0, 0, 0, 0],
+    3:  [4, 2, 0, 0, 0],
+    4:  [4, 3, 0, 0, 0],
+    5:  [4, 3, 2, 0, 0],
+    6:  [4, 3, 3, 0, 0],
+    7:  [4, 3, 3, 1, 0],
+    8:  [4, 3, 3, 2, 0],
+    9:  [4, 3, 3, 3, 1],
+    10: [4, 3, 3, 3, 2]
+  };
+
+  const DEFAULT_SPELLS = [
+    { id: 'sp1', lvl: 'Truc (0)', name: 'Guía (Guidance)', cast: '1 Acció · Toc', dur: 'C · 1 min', desc: 'Toques una criatura voluntària (o a tu) i suma +1d4 a una prova d\'habilitat.', custom: false },
+    { id: 'sp2', lvl: 'Truc (0)', name: 'Látigo de espinas', cast: '1 Acció · 9 m', dur: 'M · Instantani', desc: 'Atac de conjur. Fa 1d6 perforant (2d6 al niv. 5) i arrossega 3 m cap a tu.', custom: false },
+    { id: 'sp3', lvl: 'Truc (0)', name: 'Ilusión menor (Gnom)', cast: '1 Acció · 9 m', dur: 'S, M · 1 min', desc: 'Crees un so o una imatge estàtica (cub 1,5 m). Investigació CD 11 Int.', custom: false },
+    { id: 'sp4', lvl: 'Niv. 1 ★', name: 'Hablar con los animales', cast: '1 Acció/Rit. · Tu', dur: 'R · 10 min', desc: 'Sempre preparat (no ocupa espai). Converses amb bèsties durant 10 min.', custom: false },
+    { id: 'sp5', lvl: 'Nivell 1', name: 'Enmarañar (Entangle)', cast: '1 Acció · 27 m', dur: 'C · 1 min', desc: 'Arrels en quadrat 6×6 m. Salv. Força CD conjurs o queden apresats.', custom: false },
+    { id: 'sp6', lvl: 'Nivell 1', name: 'Buenas bayas (Goodberry)', cast: '1 Acció · Toc', dur: 'M · 24 h', desc: 'Crees 10 baies màgiques: curen 1 PG cadascuna i alimenten tot un dia.', custom: false },
+    { id: 'sp7', lvl: 'Nivell 1', name: 'Nube de oscurecimiento', cast: '1 Acció · 36 m', dur: 'C · 1 h', desc: 'Esfera de 6 m de radi de boira densa que bloqueja totalment la visió.', custom: false },
+    { id: 'sp8', lvl: 'Reserva', name: 'Hechizar persona', cast: '1 Acció · 9 m', dur: 'V, S · 1 h', desc: '4t conjur si taula 2024 (o dies socials). Salv. Saviesa CD conjurs.', custom: false }
+  ];
+
+  const SKILLS_DATA = [
+    { name: 'Acrobàcies', attr: 'dex', prof: false },
+    { name: 'Atletisme', attr: 'str', prof: false },
+    { name: 'Coneixement arcà', attr: 'int', prof: false },
+    { name: 'Engany', attr: 'cha', prof: false },
+    { name: 'Història', attr: 'int', prof: false },
+    { name: 'Interpretació', attr: 'cha', prof: false },
+    { name: 'Intimidació', attr: 'cha', prof: false },
+    { name: 'Investigació', attr: 'int', prof: false },
+    { name: 'Joc de mans', attr: 'dex', prof: false },
+    { name: 'Medicina', attr: 'wis', prof: false },
+    { name: 'Naturalesa', attr: 'int', prof: false },
+    { name: 'Percepció', attr: 'wis', prof: true },
+    { name: 'Perspicàcia', attr: 'wis', prof: false },
+    { name: 'Persuasió', attr: 'cha', prof: false },
+    { name: 'Religió', attr: 'int', prof: false },
+    { name: 'Sigil', attr: 'dex', prof: true },
+    { name: 'Supervivència', attr: 'wis', prof: true },
+    { name: 'Tracte amb animals', attr: 'wis', prof: true }
+  ];
+
+  const ATTR_LABELS = { str: 'For', dex: 'Des', con: 'Con', int: 'Int', wis: 'Sav', cha: 'Car' };
+  const ATTR_FULL = { str: 'Força', dex: 'Destresa', con: 'Constitució', int: 'Intel·ligència', wis: 'Saviesa', cha: 'Carisma' };
+
+  let charData = {
+    level: 1,
+    xp: 0,
+    hpMax: 10,
+    hpCurr: 10,
+    hpTemp: 0,
+    scores: { str: 8, dex: 14, con: 14, int: 12, wis: 15, cha: 10 },
+    usedSlots: {},
+    berries: 0,
+    wildShapeUsed: [false, false],
+    coins: { pc: 0, pp: 0, pe: 0, po: 9, ppt: 0 },
+    extraGear: '',
+    sessionNotes: '',
+    customSpells: []
+  };
+
+  function getMod(score) {
+    return Math.floor((score - 10) / 2);
+  }
+  function fmtMod(m) {
+    return m >= 0 ? `+${m}` : `${m}`;
+  }
+  function getProfBonus(lvl) {
+    return Math.ceil(lvl / 4) + 1;
+  }
+
+  function openTab(panelId, btn) {
+    document.querySelectorAll('.tab-panel').forEach(el => el.classList.remove('active'));
+    document.querySelectorAll('.book-tab').forEach(el => el.classList.remove('active'));
+    document.getElementById(panelId).classList.add('active');
+    if (btn) btn.classList.add('active');
+  }
+
+  function onLevelChange() {
+    const newLvl = parseInt(document.getElementById('ctrl-level').value);
+    const oldLvl = charData.level;
+    charData.level = newLvl;
+    // Suggest standard XP thresholds if XP is lower than threshold
+    const xpThresholds = { 1:0, 2:300, 3:900, 4:2700, 5:6500, 6:14000, 7:23000, 8:34000, 9:48000, 10:64000 };
+    if (charData.xp < xpThresholds[newLvl]) {
+      charData.xp = xpThresholds[newLvl];
+      document.getElementById('ctrl-xp').value = charData.xp;
+    }
+    if (newLvl > oldLvl) {
+      const conMod = getMod(charData.scores.con);
+      const gain = (newLvl - oldLvl) * (5 + conMod);
+      charData.hpMax += gain;
+      charData.hpCurr += gain;
+      document.getElementById('ctrl-hp-max').value = charData.hpMax;
+      document.getElementById('hp-curr').value = charData.hpCurr;
+    }
+    saveState();
+    renderAll();
+  }
+
+  function addFixedLevelHP() {
+    const conMod = getMod(charData.scores.con);
+    const gain = Math.max(1, 5 + conMod);
+    charData.hpMax += gain;
+    charData.hpCurr += gain;
+    document.getElementById('ctrl-hp-max').value = charData.hpMax;
+    document.getElementById('hp-curr').value = charData.hpCurr;
+    saveState();
+    renderAll();
+  }
+
+  function adjustAbility(attr, delta) {
+    const oldConMod = getMod(charData.scores.con);
+    let val = charData.scores[attr] + delta;
+    if (val < 6) val = 6;
+    if (val > 20) val = 20;
+    charData.scores[attr] = val;
+    if (attr === 'con') {
+      const newConMod = getMod(val);
+      if (newConMod !== oldConMod) {
+        const diff = (newConMod - oldConMod) * charData.level;
+        charData.hpMax = Math.max(1, charData.hpMax + diff);
+        charData.hpCurr = Math.max(1, charData.hpCurr + diff);
+        document.getElementById('ctrl-hp-max').value = charData.hpMax;
+        document.getElementById('hp-curr').value = charData.hpCurr;
+      }
+    }
+    saveState();
+    renderAll();
+  }
+
+  function changeHP(delta) {
+    let val = parseInt(document.getElementById('hp-curr').value || 0) + delta;
+    if (val < 0) val = 0;
+    charData.hpCurr = val;
+    document.getElementById('hp-curr').value = val;
+    saveState();
+  }
+
+  function changeBerries(delta) {
+    let val = parseInt(document.getElementById('berries-count').value || 0) + delta;
+    if (val < 0) val = 0;
+    if (val > 10) val = 10;
+    charData.berries = val;
+    document.getElementById('berries-count').value = val;
+    saveState();
+  }
+
+  function toggleSlot(key, checked) {
+    charData.usedSlots[key] = checked;
+    saveState();
+  }
+
+  function toggleWildShape(idx, checked) {
+    charData.wildShapeUsed[idx] = checked;
+    saveState();
+  }
+
+  function addCustomSpell() {
+    const lvl = document.getElementById('new-spell-lvl').value;
+    const name = document.getElementById('new-spell-name').value.trim();
+    const cast = document.getElementById('new-spell-cast').value.trim() || '1 Acció';
+    const dur = document.getElementById('new-spell-dur').value.trim() || 'Instantani';
+    const desc = document.getElementById('new-spell-desc').value.trim();
+    if (!name) { alert('Escriu el nom del conjur!'); return; }
+    charData.customSpells.push({
+      id: 'csp_' + Date.now(),
+      lvl, name, cast, dur, desc, custom: true
+    });
+    document.getElementById('new-spell-name').value = '';
+    document.getElementById('new-spell-cast').value = '';
+    document.getElementById('new-spell-dur').value = '';
+    document.getElementById('new-spell-desc').value = '';
+    saveState();
+    renderAll();
+  }
+
+  function removeCustomSpell(id) {
+    charData.customSpells = charData.customSpells.filter(s => s.id !== id);
+    saveState();
+    renderAll();
+  }
+
+  function longRest() {
+    charData.hpCurr = charData.hpMax;
+    charData.hpTemp = 0;
+    charData.usedSlots = {};
+    charData.wildShapeUsed = [false, false];
+    document.getElementById('hp-curr').value = charData.hpCurr;
+    document.getElementById('hp-temp').value = 0;
+    saveState();
+    renderAll();
+    alert(`Descans llarg completat! Punts de cop restaurats a ${charData.hpMax}, espais de conjur i usos de Forma Estel·lar/Salvatge recuperats.`);
+  }
+
+  function renderAll() {
+    const lvl = charData.level;
+    const prof = getProfBonus(lvl);
+    const mods = {
+      str: getMod(charData.scores.str),
+      dex: getMod(charData.scores.dex),
+      con: getMod(charData.scores.con),
+      int: getMod(charData.scores.int),
+      wis: getMod(charData.scores.wis),
+      cha: getMod(charData.scores.cha)
+    };
+
+    // Header & Vitals
+    document.getElementById('hdr-level').textContent = lvl;
+    document.getElementById('hdr-hitdice').textContent = `${lvl}d8`;
+    document.getElementById('hdr-xp').textContent = charData.xp;
+    document.getElementById('hdr-subclass').textContent = lvl >= 3
+      ? 'Druida · Cercle de les Estrelles'
+      : 'Druida (Cercle Estrelles al niv. 3)';
+
+    const ac = 11 + mods.dex + 2; // Cuir 11 + Des + Escut 2
+    document.getElementById('val-ac').textContent = ac;
+    document.getElementById('sub-ac').textContent = `Cuir (11) + Des (${fmtMod(mods.dex)}) + Escut (+2)`;
+
+    document.getElementById('val-hp-max').textContent = charData.hpMax;
+    document.getElementById('val-init').textContent = fmtMod(mods.dex);
+    document.getElementById('die-init').textContent = `1d20 ${mods.dex >= 0 ? '+ ' + mods.dex : '− ' + Math.abs(mods.dex)}`;
+    document.getElementById('val-prof').textContent = fmtMod(prof);
+    document.getElementById('sub-lvl').textContent = lvl;
+
+    const passivePerc = 10 + mods.wis + prof;
+    document.getElementById('val-pp').textContent = passivePerc;
+
+    // Ability Plaques
+    for (const k of ['str','dex','con','int','wis','cha']) {
+      document.getElementById(`mod-${k}`).textContent = fmtMod(mods[k]);
+      document.getElementById(`score-${k}`).textContent = charData.scores[k];
+    }
+
+    // Saving Throws
+    const savesCfg = [
+      { key: 'str', name: 'Força', prof: false, note: '' },
+      { key: 'dex', name: 'Destresa', prof: false, note: '' },
+      { key: 'con', name: 'Constitució', prof: false, note: '(Conc.)' },
+      { key: 'int', name: 'Intel·ligència', prof: true, note: '(Adv. màgia)' },
+      { key: 'wis', name: 'Saviesa', prof: true, note: '(Adv. màgia)' },
+      { key: 'cha', name: 'Carisma', prof: false, note: '(Adv. màgia)' }
+    ];
+    document.getElementById('saves-list').innerHTML = savesCfg.map(s => {
+      const val = mods[s.key] + (s.prof ? prof : 0);
+      return `<li class="prof-row ${s.prof ? 'proficient' : ''}">
+        <span class="prof-name-wrap"><span class="pip ${s.prof ? 'filled' : ''}"></span> ${s.prof ? `<strong>${s.name}</strong>` : s.name} <span class="abbr">${s.note}</span></span>
+        <span class="bonus-num">${fmtMod(val)}</span>
+      </li>`;
+    }).join('');
+
+    // Skills
+    document.getElementById('skills-list').innerHTML = SKILLS_DATA.map(sk => {
+      const val = mods[sk.attr] + (sk.prof ? prof : 0);
+      return `<li class="prof-row ${sk.prof ? 'proficient' : ''}">
+        <span class="prof-name-wrap"><span class="pip ${sk.prof ? 'filled' : ''}"></span> ${sk.prof ? `<strong>${sk.name}</strong>` : sk.name} <span class="abbr">(${ATTR_LABELS[sk.attr]})</span></span>
+        <span class="bonus-num">${fmtMod(val)}</span>
+      </li>`;
+    }).join('');
+
+    // Attacks Table (scales with level & modifiers!)
+    const spellAtk = prof + mods.wis;
+    const thornDice = lvl >= 5 ? '2d6' : '1d6';
+    const meleeAtk = prof + mods.str;
+    let attacksHTML = `
+      <tr>
+        <td><strong>Látigo de espinas</strong><br><span class="die-tag nature">Truc de Druida</span></td>
+        <td><span class="die-tag">1d20 ${spellAtk >= 0 ? '+ ' + spellAtk : spellAtk}</span></td>
+        <td><span class="die-tag dmg">${thornDice}</span> perf.</td>
+        <td>Abast <strong>9 m</strong>. Si encerta, arrossega la criatura (Gran o menor) <strong>3 m</strong> cap a tu.</td>
+      </tr>
+    `;
+    if (lvl >= 3) {
+      attacksHTML += `
+        <tr style="background: rgba(182, 134, 44, 0.14);">
+          <td><strong>Fletxa Lluminosa (Forma Arquero)</strong><br><span class="die-tag dmg">Cercle Estrelles · Acció Addicional</span></td>
+          <td><span class="die-tag">1d20 ${spellAtk >= 0 ? '+ ' + spellAtk : spellAtk}</span></td>
+          <td><span class="die-tag dmg">1d8 ${fmtMod(mods.wis)}</span> rad.</td>
+          <td>Abast <strong>18 m</strong>. Atac a distància amb acció addicional mentre brilles en Forma Estel·lar.</td>
+        </tr>
+      `;
+    }
+    attacksHTML += `
+      <tr>
+        <td><strong>Bastó de fusta</strong><br><span class="abbr">Canalitzador druídic</span></td>
+        <td><span class="die-tag">1d20 ${meleeAtk >= 0 ? '+ ' + meleeAtk : meleeAtk}</span></td>
+        <td><span class="die-tag dmg">1d6 ${fmtMod(mods.str)}</span> cont.</td>
+        <td>Cos a cos (1,5 m). Versàtil (<strong>1d8 ${fmtMod(mods.str)}</strong> a dues mans). Focus màgic.</td>
+      </tr>
+      <tr>
+        <td><strong>Falç (Hoz)</strong><br><span class="abbr">Arma senzilla</span></td>
+        <td><span class="die-tag">1d20 ${meleeAtk >= 0 ? '+ ' + meleeAtk : meleeAtk}</span></td>
+        <td><span class="die-tag dmg">1d4 ${fmtMod(mods.str)}</span> tall.</td>
+        <td>Cos a cos (1,5 m). Arma lleugera.</td>
+      </tr>
+    `;
+    document.getElementById('attacks-tbody').innerHTML = attacksHTML;
+
+    // Class Features (dynamically includes level 2+ features)
+    let featHTML = `
+      <div class="trait-entry"><span class="trait-lead">Astúcia Gnòmica (Gnom del bosc).</span> Tens <strong>avantatge</strong> en totes les tirades de salvació d'Intel·ligència, Saviesa i Carisma contra màgia. Visió en la foscor fins a 18 metres.</div>
+      <div class="trait-entry"><span class="trait-lead">Parlar amb Bèsties Petites i Il·lusionista Nat.</span> Comuniques idees senzilles amb animals Petits o menors. Coneixes el truc <em>Ilusión menor</em> (CD ${8 + prof + mods.int} Int).</div>
+      <div class="trait-entry"><span class="trait-lead">Druídic i Vot d'Aetheris.</span> Idioma secret dels druides (missatges ocults CD 15). Dieta estrictament vegana i prohibit portar armadures o escuts de metall.</div>
+      <div class="trait-entry"><span class="trait-lead">Tret de Rerefons: Guia / Foraster.</span> Memòria fotogràfica de mapes i corrents marins; trobes menjar i aigua per a tu i fins a 5 aliats.</div>
+    `;
+    if (lvl >= 2) {
+      featHTML += `<div class="trait-entry" style="background:rgba(36,74,56,0.07);padding:6px 8px;border-radius:4px;"><span class="trait-lead">Forma Salvatge (Nivell 2 · 2 usos/descans).</span> Pots transformar-te en una bèstia vista (VD màx. ${lvl >= 8 ? '1' : (lvl >= 4 ? '1/2' : '1/4')}) com a acció addicional.</div>`;
+    }
+    if (lvl >= 3) {
+      const starUses = Math.max(1, mods.wis);
+      featHTML += `
+        <div class="trait-entry" style="background:rgba(182,134,44,0.12);padding:6px 8px;border-radius:4px;">
+          <span class="trait-lead">Mapa Estel·lar (Cercle de les Estrelles · Nivell 3).</span> Canalitzador màgic diminut. Tens sempre preparats <em>Guía</em> i <em>Saeta guía</em>, i pots llançar <strong>Saeta guía</strong> (${starUses} vegades/descans llarg) sense gastar espai de conjur.
+        </div>
+        <div class="trait-entry" style="background:rgba(182,134,44,0.12);padding:6px 8px;border-radius:4px;">
+          <span class="trait-lead">Forma Estel·lar (Cercle de les Estrelles · Nivell 3).</span> Gastes 1 ús de Forma Salvatge per brillar durant 10 minuts i triar constel·lació: <strong>Arquero</strong> (atac radiant 1d8${fmtMod(mods.wis)} com a acció addicional), <strong>Cáliz</strong> (+1d8${fmtMod(mods.wis)} extra en curar) o <strong>Dragón</strong> (mínim 10 al d20 per mantenir concentració).
+        </div>
+      `;
+    }
+    featHTML += `<div class="trait-entry"><span class="trait-lead">Competències.</span> <strong>Armadures:</strong> Lleugeres, mitjanes i escuts (sense metall). <strong>Eines:</strong> Estris d'herborista, eines de cartògraf. <strong>Idiomes:</strong> Comú, Gnom, Druídic, Aquàtic (+1 extra).</div>`;
+    document.getElementById('features-container').innerHTML = featHTML;
+
+    // Magic Stats
+    const spellDC = 8 + prof + mods.wis;
+    const prepCount = Math.max(1, mods.wis + lvl);
+    document.getElementById('mag-wis-mod').textContent = fmtMod(mods.wis);
+    document.getElementById('mag-dc').textContent = spellDC;
+    document.getElementById('mag-dc-formula').textContent = `8 + ${prof} (Comp) + ${mods.wis} (Sav)`;
+    document.getElementById('mag-atk').textContent = fmtMod(spellAtk);
+    document.getElementById('mag-atk-die').textContent = `1d20 ${spellAtk >= 0 ? '+ ' + spellAtk : spellAtk}`;
+    document.getElementById('mag-prep').textContent = `${prepCount} / dia`;
+
+    // Arcane Tracker (Slots per level + Wild Shape + Goodberries)
+    const slotsArr = DRUID_SLOTS[lvl] || [2,0,0,0,0];
+    let slotsHTML = `<div class="tracker-cluster" style="flex-direction:column;align-items:flex-start;gap:6px;">`;
+    slotsArr.forEach((count, idx) => {
+      if (count > 0) {
+        const sLvl = idx + 1;
+        let boxes = '';
+        for (let i = 1; i <= count; i++) {
+          const key = `L${sLvl}_${i}`;
+          const chk = charData.usedSlots[key] ? 'checked' : '';
+          boxes += `<label class="rune-check"><input type="checkbox" ${chk} onchange="toggleSlot('${key}', this.checked)"> ${i}</label>`;
+        }
+        slotsHTML += `<div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;"><span>🔮 Nivell ${sLvl} (${count}):</span> ${boxes}</div>`;
+      }
+    });
+    if (lvl >= 2) {
+      slotsHTML += `<div style="display:flex;align-items:center;gap:6px;margin-top:2px;">
+        <span>✨ Usos Forma Salvatge / Estel·lar (2):</span>
+        <label class="rune-check"><input type="checkbox" ${charData.wildShapeUsed[0] ? 'checked' : ''} onchange="toggleWildShape(0, this.checked)"> Ús 1</label>
+        <label class="rune-check"><input type="checkbox" ${charData.wildShapeUsed[1] ? 'checked' : ''} onchange="toggleWildShape(1, this.checked)"> Ús 2</label>
+      </div>`;
+    }
+    slotsHTML += `</div>`;
+    slotsHTML += `
+      <div class="tracker-cluster">
+        <span>🍒 Bones Baies (0–10):</span>
+        <button class="step-btn" onclick="changeBerries(-1)">−</button>
+        <input type="number" id="berries-count" class="hp-input" style="width:44px;font-size:1.1rem;" value="${charData.berries}" min="0" max="10" onchange="saveState()">
+        <button class="step-btn" onclick="changeBerries(1)">+</button>
+      </div>
+    `;
+    document.getElementById('slots-tracker-bar').innerHTML = slotsHTML;
+
+    // Spells Table
+    let allSpells = [...DEFAULT_SPELLS];
+    if (lvl >= 3) {
+      const starUses = Math.max(1, mods.wis);
+      allSpells.splice(4, 0, {
+        id: 'sp_star_bolt',
+        lvl: 'Estrelles ★',
+        name: 'Saeta guía (Guiding Bolt)',
+        cast: '1 Acció · 36 m',
+        dur: 'V, S · 1 ronda',
+        desc: `Sempre preparat. Atac 1d20+${spellAtk}: 4d6 radiant i el següent atac contra l'objectiu té avantatge (${starUses} usos gratis/dia).`,
+        custom: false
+      });
+    }
+    allSpells = allSpells.concat(charData.customSpells);
+
+    document.getElementById('spells-tbody').innerHTML = allSpells.map(sp => {
+      const tagClass = sp.lvl.includes('Truc') ? 'nature' : (sp.lvl.includes('★') ? 'dmg' : '');
+      const delBtn = sp.custom ? `<button class="del-spell-btn" onclick="removeCustomSpell('${sp.id}')" title="Eliminar conjur">✕</button>` : '';
+      return `<tr>
+        <td><span class="die-tag ${tagClass}">${sp.lvl}</span></td>
+        <td><strong>${sp.name}</strong></td>
+        <td>${sp.cast}</td>
+        <td>${sp.dur}</td>
+        <td>${sp.desc}</td>
+        <td>${delBtn}</td>
+      </tr>`;
+    }).join('');
+
+    // Level-Up Tab: Ability Adjuster
+    document.getElementById('ability-adjuster-list').innerHTML = ['str','dex','con','int','wis','cha'].map(k => {
+      return `<div class="stat-adjust-row">
+        <div><strong>${ATTR_FULL[k]}</strong> <span class="abbr">(Mod. ${fmtMod(mods[k])})</span></div>
+        <div class="stat-adjust-btns">
+          <button class="step-btn" onclick="adjustAbility('${k}', -1)">−</button>
+          <span style="font-family:'Cinzel',serif;font-weight:800;font-size:1.05rem;min-width:26px;text-align:center;">${charData.scores[k]}</span>
+          <button class="step-btn" onclick="adjustAbility('${k}', 1)">+</button>
+        </div>
+      </div>`;
+    }).join('');
+
+    // Level-Up Tab: Milestones Roadmap
+    const milestones = [
+      { l: 1, title: 'Nivell 1 — Iniciat als Boscos i Mars', desc: 'Druídic, Llançament de conjurs (2 trucs, 2 espais de niv. 1) i Hablar con los animales sempre preparat.' },
+      { l: 2, title: 'Nivell 2 — Forma Salvatge (300 PX)', desc: 'Guanyes 2 usos de Forma Salvatge per descans per transformar-te en animals petits/mitjans (sense volar ni nedar).' },
+      { l: 3, title: 'Nivell 3 — Cercle de les Estrelles (900 PX)', desc: 'Subclasse oficial! Reps el Mapa Estel·lar (Saeta guía gratis), la Forma Estel·lar (Arquero, Cáliz o Dragón) i accés a conjurs de Nivell 2.' },
+      { l: 4, title: 'Nivell 4 — Millora de Característica o Dote (2.700 PX)', desc: 'Aprens 1 truc més (3 en total), pots nedar en Forma Salvatge i sumes +2 punts a les teves característiques (o tries una dote).' },
+      { l: 5, title: 'Nivell 5 — Competència +3 i Conjurs de Nivell 3 (6.500 PX)', desc: 'El bonificador per competència puja a +3, els teus trucs fan el doble de daus (Látigo 2d6) i desbloqueges conjurs potents com Invocar relámpagos.' }
+    ];
+    document.getElementById('roadmap-list').innerHTML = milestones.map(m => {
+      const active = lvl >= m.l;
+      return `<div class="milestone-card ${active ? 'unlocked' : 'locked'}">
+        <div style="font-family:'Cinzel',serif;font-weight:800;font-size:0.84rem;color:${active ? 'var(--forest)' : 'var(--ink-muted)'};">
+          ${active ? '✔' : '🔒'} ${m.title}
+        </div>
+        <div style="font-size:0.84rem;margin-top:2px;">${m.desc}</div>
+      </div>`;
+    }).join('');
+  }
+
+  function saveState() {
+    charData.hpCurr = parseInt(document.getElementById('hp-curr').value || 0);
+    charData.hpTemp = parseInt(document.getElementById('hp-temp').value || 0);
+    charData.xp = parseInt(document.getElementById('ctrl-xp').value || 0);
+    charData.hpMax = parseInt(document.getElementById('ctrl-hp-max').value || 10);
+    const bEl = document.getElementById('berries-count');
+    if (bEl) charData.berries = parseInt(bEl.value || 0);
+    charData.coins = {
+      pc: parseInt(document.getElementById('coin-pc').value || 0),
+      pp: parseInt(document.getElementById('coin-pp').value || 0),
+      pe: parseInt(document.getElementById('coin-pe').value || 0),
+      po: parseInt(document.getElementById('coin-po').value || 0),
+      ppt: parseInt(document.getElementById('coin-ppt').value || 0)
+    };
+    charData.extraGear = document.getElementById('extra-gear').value;
+    charData.sessionNotes = document.getElementById('session-notes').value;
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(charData));
+  }
+
+  function loadState() {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (raw) {
+      try {
+        const parsed = JSON.parse(raw);
+        charData = { ...charData, ...parsed };
+      } catch (e) {}
+    }
+    document.getElementById('ctrl-level').value = charData.level;
+    document.getElementById('ctrl-xp').value = charData.xp;
+    document.getElementById('ctrl-hp-max').value = charData.hpMax;
+    document.getElementById('hp-curr').value = charData.hpCurr;
+    document.getElementById('hp-temp').value = charData.hpTemp;
+    document.getElementById('coin-pc').value = charData.coins.pc;
+    document.getElementById('coin-pp').value = charData.coins.pp;
+    document.getElementById('coin-pe').value = charData.coins.pe;
+    document.getElementById('coin-po').value = charData.coins.po;
+    document.getElementById('coin-ppt').value = charData.coins.ppt;
+    document.getElementById('extra-gear').value = charData.extraGear || '';
+    document.getElementById('session-notes').value = charData.sessionNotes || '';
+  }
+
+  function resetSheet() {
+    if (!confirm('Vols reiniciar tota la fitxa als valors inicials de Nivell 1?')) return;
+    localStorage.removeItem(STORAGE_KEY);
+    location.reload();
+  }
+
+  loadState();
+  renderAll();
+</script>
+</body>
+</html>

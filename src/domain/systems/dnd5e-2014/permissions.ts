@@ -1,3 +1,4 @@
+import { getAllowedOfficialWeaponAbilities } from './attacks';
 import type { Dnd5e2014SheetData } from './schema';
 import type { Dnd5e2014SheetPatchOutput } from './validation';
 
@@ -14,6 +15,9 @@ export const PROTECTED_OFFICIAL_CALCULATION_PATHS = [
   'initiative.bonus',
   'attacks.bonusOverride',
   'attacks.attackBonus',
+  'inventory.weaponProficient',
+  'inventory.weaponAbilityOverride',
+  'attunement.limitOverride',
   'spellcasting.abilityOverride',
   'spellcasting.saveDcOverride',
   'spellcasting.attackBonusOverride',
@@ -49,6 +53,8 @@ export const DEFAULT_PLAYER_EDITABLE_FIELDS = [
   'generalInfo.alignment',
   'generalInfo.faith',
   'generalInfo.age',
+  'generalInfo.size',
+  'generalInfo.senses',
   'generalInfo.appearanceNotes',
   'raceAndClass',
   'abilities',
@@ -252,6 +258,9 @@ export function extractTouchedPathsFromSheetPatch(
     if (patch.savingThrows.proficient !== undefined) {
       touched.add('savingThrows.proficient');
     }
+    if (patch.savingThrows.rollModes !== undefined) {
+      touched.add('savingThrows.rollModes');
+    }
     if (patch.savingThrows.overrides !== undefined) {
       if (
         isGmOnly('savingThrows.overrides') ||
@@ -266,6 +275,7 @@ export function extractTouchedPathsFromSheetPatch(
     if (patch.skills.proficient !== undefined) touched.add('skills.proficient');
     if (patch.skills.expertise !== undefined) touched.add('skills.expertise');
     if (patch.skills.halfProficient !== undefined) touched.add('skills.halfProficient');
+    if (patch.skills.rollModes !== undefined) touched.add('skills.rollModes');
     if (patch.skills.overrides !== undefined) {
       if (
         isGmOnly('skills.overrides') ||
@@ -356,7 +366,49 @@ export function extractTouchedPathsFromSheetPatch(
     }
   }
 
-  if (patch.inventory !== undefined) touched.add('inventory');
+  if (patch.inventory !== undefined) {
+    touched.add('inventory');
+    const existingInvById = new Map(existingSheet.inventory.map((i) => [i.id, i]));
+    const resultingClasses = patch.raceAndClass?.classes ?? existingSheet.raceAndClass.classes;
+
+    for (const item of patch.inventory) {
+      const prev = existingInvById.get(item.id);
+      if (
+        isGmOnly('inventory.weaponProficient') ||
+        (prev ? item.weaponProficient !== prev.weaponProficient : item.weaponProficient === true)
+      ) {
+        touched.add('inventory.weaponProficient');
+      }
+
+      const allowedNow = getAllowedOfficialWeaponAbilities(item, resultingClasses);
+      const isCustomAbilityNow =
+        item.weaponAbility !== null && !allowedNow.includes(item.weaponAbility);
+
+      if (
+        isGmOnly('inventory.weaponAbilityOverride') ||
+        (isCustomAbilityNow && (!prev || item.weaponAbility !== prev.weaponAbility))
+      ) {
+        touched.add('inventory.weaponAbilityOverride');
+      } else if (prev && prev.weaponAbility !== null) {
+        const allowedPrev = getAllowedOfficialWeaponAbilities(
+          prev,
+          existingSheet.raceAndClass.classes
+        );
+        if (!allowedPrev.includes(prev.weaponAbility) && item.weaponAbility !== prev.weaponAbility) {
+          touched.add('inventory.weaponAbilityOverride');
+        }
+      }
+    }
+  }
+
+  if (patch.attunement?.limitOverride !== undefined) {
+    if (
+      isGmOnly('attunement.limitOverride') ||
+      patch.attunement.limitOverride !== existingSheet.attunement.limitOverride
+    ) {
+      touched.add('attunement.limitOverride');
+    }
+  }
 
   if (patch.currency) {
     for (const key of Object.keys(patch.currency) as Array<keyof typeof patch.currency>) {
@@ -474,6 +526,26 @@ export function extractProtectedPathsFromCreationPatch(
   }
   if (patch.attacks?.some((a) => a.attackBonus !== null)) {
     violated.push('attacks.attackBonus');
+  }
+  if (patch.inventory?.some((i) => i.weaponProficient === true)) {
+    violated.push('inventory.weaponProficient');
+  }
+  if (patch.inventory) {
+    const classes = patch.raceAndClass?.classes ?? [];
+    const hasCustomWeaponAbility = patch.inventory.some(
+      (i) =>
+        i.weaponAbility !== null &&
+        !getAllowedOfficialWeaponAbilities(i, classes).includes(i.weaponAbility)
+    );
+    if (hasCustomWeaponAbility) {
+      violated.push('inventory.weaponAbilityOverride');
+    }
+  }
+  if (
+    patch.attunement?.limitOverride !== undefined &&
+    patch.attunement.limitOverride !== null
+  ) {
+    violated.push('attunement.limitOverride');
   }
   if (
     patch.spellcasting?.abilityOverride !== undefined &&

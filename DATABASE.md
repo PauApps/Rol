@@ -19,8 +19,10 @@ Totes les taules resideixen en **PostgreSQL** i es defineixen a [src/db/schema.t
 
 | Taula | Estat | Propòsit |
 |---|---|---|
-| `characters` | Model universal `v2` actiu (Fase 3, Increment 2) | Emmagatzema personatges per campanya i membre, `schema_version` (`v1 → v2` retrocompatible), `sheet_data` JSONB validat amb Zod, `custom_fields`, `field_permissions` (`playerEditableFields`, `gmOnlyFields`, `authorizedOverrideFields`) i `gm_notes` (reservat exclusivament al GM, afegit a la migració `0001_cooing_hiroim.sql`) |
+| `characters` | Model universal `v2` ampliat (Fase 3, Increment 3B) | Emmagatzema personatges per campanya i membre, `schema_version` (`v1 → v2` retrocompatible), `sheet_data` JSONB validat amb Zod (incloent-hi `generalInfo.size`/`senses`, `savingThrows.rollModes`, `skills.rollModes`, `attacks.inventoryItemId`/`range`, categoria `magic_item`, sintonització i camps d’arma a `inventory`, `attunement.limitOverride`, metadades/origen/preparació a `spells` i `progression.levelHistory`), `custom_fields`, `field_permissions` (`playerEditableFields`, `gmOnlyFields`, `authorizedOverrideFields`) i `gm_notes` (reservat exclusivament al GM, afegit a la migració `0001_cooing_hiroim.sql`) |
 | `character_revisions` | Preparada (Fase 4) | Historial immutable de canvis per camp (`field_path`, `previous_value`, `new_value`, `reason`, `session_ref`) |
+
+> **Nota sobre l’Increment 3B (sense migració SQL):** totes les ampliacions del model `Dnd5e2014SheetData` s’emmagatzemen dins la columna JSONB existent `characters.sheet_data` amb valors per defecte segurs a Zod i normalització automàtica a `normalizeDnd5e2014Sheet()`. No cal executar cap nova migració DDL a PostgreSQL / Neon.
 
 ## Eliminació reversible (Paperera de 30 dies)
 

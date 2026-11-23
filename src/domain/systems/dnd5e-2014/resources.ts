@@ -10,6 +10,8 @@ import type { Dnd5e2014SheetData, ResourceRecovery } from './schema';
 export interface ComputedCharacterResource {
   key: string;
   usageKey: string;
+  origin: 'official' | 'custom';
+  sourceClassId: string | null;
   name: string;
   source: string;
   totalUses: number | null;
@@ -25,6 +27,8 @@ function makeResource(
   params: {
     key: string;
     usageKey?: string;
+    origin?: 'official' | 'custom';
+    sourceClassId?: string | null;
     name: string;
     source: string;
     totalUses: number | null;
@@ -48,6 +52,8 @@ function makeResource(
   return {
     key: params.key,
     usageKey,
+    origin: params.origin ?? (params.isCustom ? 'custom' : 'official'),
+    sourceClassId: params.sourceClassId ?? null,
     name: params.name,
     source: params.source,
     totalUses: params.totalUses,
@@ -92,6 +98,7 @@ export function computeCharacterResources(
           makeResource(
             {
               key: 'class:barbarian:rage',
+              sourceClassId: 'barbarian',
               name: 'Ira',
               source: classLabel,
               totalUses: total,
@@ -110,6 +117,7 @@ export function computeCharacterResources(
           makeResource(
             {
               key: 'class:bard:bardic_inspiration',
+              sourceClassId: 'bard',
               name: 'Inspiració bàrdica',
               source: classLabel,
               totalUses: Math.max(1, chaMod),
@@ -129,6 +137,7 @@ export function computeCharacterResources(
             makeResource(
               {
                 key: 'class:cleric:channel_divinity',
+                sourceClassId: 'cleric',
                 name: 'Canalitzar divinitat',
                 source: classLabel,
                 totalUses: total,
@@ -149,6 +158,7 @@ export function computeCharacterResources(
             makeResource(
               {
                 key: 'class:druid:wild_shape',
+                sourceClassId: 'druid',
                 name: 'Forma salvatge',
                 source: classLabel,
                 totalUses: unlimited ? null : 2,
@@ -160,12 +170,30 @@ export function computeCharacterResources(
             )
           );
 
+          if (cls.subclassId === 'circle-of-the-land') {
+            resources.push(
+              makeResource(
+                {
+                  key: 'subclass:circle-of-the-land:natural_recovery',
+                  sourceClassId: 'druid',
+                  name: 'Recuperació natural',
+                  source: subclassLabel || 'Cercle de la Terra',
+                  totalUses: 1,
+                  recovery: 'long_rest',
+                  description: `Recupera espais de conjur fins a un total de ${Math.ceil(level / 2)} nivell(s) durant un descans curt.`,
+                },
+                usage
+              )
+            );
+          }
+
           if (cls.subclassId === 'circle-of-stars') {
             resources.push(
               makeResource(
                 {
                   key: 'subclass:circle-of-stars:starry_form',
                   usageKey: 'class:druid:wild_shape',
+                  sourceClassId: 'druid',
                   name: 'Forma estel·lar',
                   source: subclassLabel || 'Cercle de les Estrelles',
                   totalUses: unlimited ? null : 2,
@@ -181,15 +209,32 @@ export function computeCharacterResources(
               makeResource(
                 {
                   key: 'subclass:circle-of-stars:star_map',
+                  sourceClassId: 'druid',
                   name: 'Mapa estel·lar (Guia / Raig traçador)',
                   source: subclassLabel || 'Cercle de les Estrelles',
                   totalUses: proficiencyBonus,
                   recovery: 'long_rest',
-                  description: 'Llançaments gratuïts sense consumir espai de conjur (segons competència).',
+                  description: 'Llançaments gratuïts sense consumir espai de conjur (igual a la bonificació de competència).',
                 },
                 usage
               )
             );
+            if (level >= 6) {
+              resources.push(
+                makeResource(
+                  {
+                    key: 'subclass:circle-of-stars:cosmic_omen',
+                    sourceClassId: 'druid',
+                    name: 'Presagi còsmic',
+                    source: subclassLabel || 'Cercle de les Estrelles',
+                    totalUses: proficiencyBonus,
+                    recovery: 'long_rest',
+                    description: 'Reacció per sumar o restar 1d6 a tirades d’atac, habilitats o salvacions.',
+                  },
+                  usage
+                )
+              );
+            }
           }
         }
         break;
@@ -200,6 +245,7 @@ export function computeCharacterResources(
           makeResource(
             {
               key: 'class:fighter:second_wind',
+              sourceClassId: 'fighter',
               name: 'Segon alè',
               source: classLabel,
               totalUses: 1,
@@ -214,6 +260,7 @@ export function computeCharacterResources(
             makeResource(
               {
                 key: 'class:fighter:action_surge',
+                sourceClassId: 'fighter',
                 name: 'Acció sobtada',
                 source: classLabel,
                 totalUses: level >= 17 ? 2 : 1,
@@ -229,6 +276,7 @@ export function computeCharacterResources(
             makeResource(
               {
                 key: 'class:fighter:indomitable',
+                sourceClassId: 'fighter',
                 name: 'Indomable',
                 source: classLabel,
                 totalUses: level >= 17 ? 3 : level >= 13 ? 2 : 1,
@@ -245,6 +293,7 @@ export function computeCharacterResources(
             makeResource(
               {
                 key: 'subclass:battle-master:superiority_dice',
+                sourceClassId: 'fighter',
                 name: 'Daus de superioritat',
                 source: subclassLabel || 'Mestre de Batalla',
                 totalUses: diceCount,
@@ -264,6 +313,7 @@ export function computeCharacterResources(
             makeResource(
               {
                 key: 'class:monk:ki',
+                sourceClassId: 'monk',
                 name: 'Punts de Ki',
                 source: classLabel,
                 totalUses: level,
@@ -282,6 +332,7 @@ export function computeCharacterResources(
           makeResource(
             {
               key: 'class:paladin:divine_sense',
+              sourceClassId: 'paladin',
               name: 'Sentit diví',
               source: classLabel,
               totalUses: 1 + Math.max(0, chaMod),
@@ -295,6 +346,7 @@ export function computeCharacterResources(
           makeResource(
             {
               key: 'class:paladin:lay_on_hands',
+              sourceClassId: 'paladin',
               name: 'Imposició de mans (punts)',
               source: classLabel,
               totalUses: level * 5,
@@ -309,6 +361,7 @@ export function computeCharacterResources(
             makeResource(
               {
                 key: 'class:paladin:channel_divinity',
+                sourceClassId: 'paladin',
                 name: 'Canalitzar divinitat',
                 source: classLabel,
                 totalUses: 1,
@@ -322,12 +375,19 @@ export function computeCharacterResources(
         break;
       }
 
+      case 'ranger': {
+        // PHB 2014 Ranger class traits are passive or consume spell slots (Primeval Awareness).
+        // Subclass/homebrew temporary pools can still be added via `customResources`.
+        break;
+      }
+
       case 'rogue': {
         if (level >= 20) {
           resources.push(
             makeResource(
               {
                 key: 'class:rogue:stroke_of_luck',
+                sourceClassId: 'rogue',
                 name: 'Cop de sort',
                 source: classLabel,
                 totalUses: 1,
@@ -347,6 +407,7 @@ export function computeCharacterResources(
             makeResource(
               {
                 key: 'class:sorcerer:sorcery_points',
+                sourceClassId: 'sorcerer',
                 name: 'Punts de bruixeria',
                 source: classLabel,
                 totalUses: level,
@@ -371,6 +432,7 @@ export function computeCharacterResources(
             makeResource(
               {
                 key: 'class:warlock:mystic_arcanum',
+                sourceClassId: 'warlock',
                 name: 'Arcanum místic (cercles 6è–9è)',
                 source: classLabel,
                 totalUses: arcanumCount,
@@ -389,6 +451,7 @@ export function computeCharacterResources(
           makeResource(
             {
               key: 'class:wizard:arcane_recovery',
+              sourceClassId: 'wizard',
               name: 'Recuperació arcana',
               source: classLabel,
               totalUses: 1,
@@ -398,6 +461,22 @@ export function computeCharacterResources(
             usage
           )
         );
+        if (level >= 2 && cls.subclassId === 'divination') {
+          resources.push(
+            makeResource(
+              {
+                key: 'subclass:divination:portent',
+                sourceClassId: 'wizard',
+                name: 'Presagi (Daus d’endevinació)',
+                source: subclassLabel || 'Escola d’Endevinació',
+                totalUses: level >= 14 ? 3 : 2,
+                recovery: 'long_rest',
+                description: 'Daus d20 tirats en acabar un descans llarg per substituir tirades pròpies o alienes.',
+              },
+              usage
+            )
+          );
+        }
         break;
       }
 
@@ -411,6 +490,8 @@ export function computeCharacterResources(
       makeResource(
         {
           key: `custom:${custom.id}`,
+          origin: 'custom',
+          sourceClassId: null,
           name: custom.name,
           source: 'Personalitzat',
           totalUses: Math.max(0, Math.floor(custom.maxUses)),

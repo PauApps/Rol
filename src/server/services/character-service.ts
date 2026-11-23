@@ -124,6 +124,20 @@ function sanitizeCustomFieldsPatch(raw: Record<string, unknown> | undefined): Re
   return result;
 }
 
+function assertPlayerPreparedSpellLimits(sheet: Dnd5e2014SheetData, isGm: boolean): void {
+  if (isGm) return;
+  const snapshot = computeDnd5e2014Sheet(sheet);
+  const exceededSource = snapshot.spellcasting?.sources.find(
+    (src) => src.exceedsPreparedLimit
+  );
+  if (exceededSource) {
+    throw badRequest(
+      'SPELL_PREPARED_LIMIT_EXCEEDED',
+      `Has preparat ${exceededSource.preparedCount} conjurs de ${exceededSource.classLabelCa}, però el màxim oficial actual és ${exceededSource.preparedLimit}.`
+    );
+  }
+}
+
 /**
  * Lists ALL characters belonging to the campaign.
  * - Both GM and active players/guests of the campaign can inspect the party's characters.
@@ -381,6 +395,9 @@ export async function createCharacterBase(
       creationValidation.violations[0] ?? 'La creació no compleix les regles de la campanya.',
       { violations: creationValidation.violations }
     );
+  }
+  if (parsedInitialPatch?.spells !== undefined) {
+    assertPlayerPreparedSpellLimits(validatedSheet, isGm);
   }
 
   const normalizedPermissions = normalizeFieldPermissions(
@@ -708,6 +725,9 @@ export async function updateCharacterBase(
       creationValidation.violations[0] ?? 'Els canvis incompleixen les regles de la campanya.',
       { violations: creationValidation.violations }
     );
+  }
+  if (parsedSheetPatch?.spells !== undefined) {
+    assertPlayerPreparedSpellLimits(validatedSheet, isGm);
   }
 
   if (patch.customFields) {

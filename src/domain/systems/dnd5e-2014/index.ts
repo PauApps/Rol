@@ -18,8 +18,10 @@ export const dnd5e2014System: GameSystemDefinition<Dnd5e2014SheetData> = {
 export * from './catalog';
 export * from './schema';
 export * from './dice';
+export * from './attacks';
 export * from './resources';
 export * from './rules';
 export * from './validation';
 export * from './permissions';
+export * from './rests';
 export * from './creation-validator';

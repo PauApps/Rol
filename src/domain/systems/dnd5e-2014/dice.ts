@@ -1,3 +1,5 @@
+import { forbidden } from '@/domain/errors';
+
 export type RollMode = 'advantage' | 'normal' | 'disadvantage';
 
 /**
@@ -113,4 +115,37 @@ export function rollD20Check(input: D20RollInput): D20RollResult {
     isCriticalHit: isAttack && keptDie === 20,
     isCriticalMiss: isAttack && keptDie === 1,
   };
+}
+
+export interface ExecuteVirtualRollInput {
+  virtualDiceEnabled: boolean;
+  modifier: number;
+  checkType?: D20RollCheckType;
+  storedMode?: RollMode;
+  advantageSources?: number;
+  disadvantageSources?: number;
+  rng?: () => number;
+}
+
+/**
+ * Executes an interactive virtual roll ONLY when `campaign.virtualDiceEnabled` is true.
+ * Combines the character's per-skill/save stored preference with situational sources
+ * under strict D&D 5e (2014) mutual cancellation rules.
+ */
+export function executeVirtualD20Check(input: ExecuteVirtualRollInput): D20RollResult {
+  if (!input.virtualDiceEnabled) {
+    throw forbidden(
+      'VIRTUAL_DICE_DISABLED',
+      'El dau virtual està desactivat en aquesta campanya. Utilitza daus físics.'
+    );
+  }
+
+  return rollD20Check({
+    modifier: input.modifier,
+    checkType: input.checkType,
+    mode: input.storedMode,
+    advantageSources: input.advantageSources,
+    disadvantageSources: input.disadvantageSources,
+    rng: input.rng,
+  });
 }

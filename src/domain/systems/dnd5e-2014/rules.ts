@@ -1,7 +1,9 @@
+import { computeAttacks, type ComputedAttack } from './attacks';
 import {
   ABILITY_KEYS,
   ABILITY_LABELS_CA,
   ABILITY_SHORT_CA,
+  DEFAULT_ATTUNEMENT_LIMIT_2014,
   DND5E_SKILLS,
   FULL_CASTER_SLOTS_2014,
   MAX_OFFICIAL_LEVEL_2014,
@@ -9,11 +11,15 @@ import {
   PACT_MAGIC_SLOTS_2014,
   XP_THRESHOLDS_2014,
   getClassEntry,
+  getHitDieAverageGain,
   getSubclassEntry,
+  resolveEffectiveClassSpellcasting,
   type AbilityKey,
   type CasterProgression,
   type SkillId,
+  type SpellcastingModel,
 } from './catalog';
+import type { RollMode } from './dice';
 import { computeCharacterResources, type ComputedCharacterResource } from './resources';
 import type { Dnd5e2014SheetData } from './schema';
 
@@ -28,6 +34,7 @@ export interface ComputedSavingThrow {
   proficiencyApplied: number;
   override: number | null;
   total: number;
+  rollMode: RollMode;
 }
 
 export interface ComputedSkill {
@@ -40,6 +47,7 @@ export interface ComputedSkill {
   proficiencyApplied: number;
   override: number | null;
   total: number;
+  rollMode: RollMode;
 }
 
 export interface ComputedArmorClass {
@@ -62,6 +70,28 @@ export interface ComputedPactMagicSlots {
   available: number;
 }
 
+export interface ComputedSpellcastingSource {
+  classId: string;
+  classLabelCa: string;
+  subclassId: string | null;
+  subclassLabelCa: string | null;
+  classLevel: number;
+  progression: CasterProgression;
+  model: SpellcastingModel;
+  ability: AbilityKey | null;
+  abilityLabelCa: string | null;
+  saveDc: number | null;
+  attackBonus: number | null;
+  usesSpellbook: boolean;
+  maxClassSpellLevel: number;
+  preparedLimit: number | null;
+  preparedCount: number;
+  alwaysPreparedCount: number;
+  spellbookCount: number;
+  knownCount: number;
+  exceedsPreparedLimit: boolean;
+}
+
 export interface ComputedSpellcasting {
   ability: AbilityKey | null;
   abilityLabelCa: string | null;
@@ -71,6 +101,42 @@ export interface ComputedSpellcasting {
   effectiveCasterLevel: number;
   slots: ComputedSpellSlotLevel[];
   pactMagic: ComputedPactMagicSlots | null;
+  sources: ComputedSpellcastingSource[];
+  specialSpellsCount: number;
+  totalSpellbookCount: number;
+  totalPreparedCount: number;
+}
+
+export interface ComputedClassProgression {
+  classId: string;
+  classLabelCa: string;
+  subclassLabelCa: string | null;
+  level: number;
+  hitDie: 6 | 8 | 10 | 12 | null;
+  averageHpPerLevel: number | null;
+  subclassUnlocked: boolean;
+  subclassLevel: number | null;
+  unlockedAsiLevels: number[];
+  nextAsiLevel: number | null;
+}
+
+export type ProgressionMilestoneCategory =
+  | 'proficiency_bonus'
+  | 'subclass'
+  | 'asi'
+  | 'spell_circle'
+  | 'class_feature';
+
+export interface ComputedProgressionMilestone {
+  scope: 'character' | 'class';
+  classId: string | null;
+  classLabelCa: string | null;
+  targetTotalLevel: number;
+  targetClassLevel: number | null;
+  levelsRemaining: number;
+  category: ProgressionMilestoneCategory;
+  titleCa: string;
+  descriptionCa: string;
 }
 
 export interface ComputedProgression {
@@ -82,8 +148,20 @@ export interface ComputedProgression {
   xpToNextLevel: number | null;
   progressPercent: number;
   isMaxLevel: boolean;
+  maxLevelMessageCa: string | null;
   unlockedAsiCount: number;
   unlockedAsiDetails: Array<{ classLabel: string; level: number }>;
+  classProgressions: ComputedClassProgression[];
+  upcomingMilestones: ComputedProgressionMilestone[];
+}
+
+export interface ComputedAttunementSummary {
+  attunedCount: number;
+  maxSlots: number;
+  availableSlots: number;
+  isOverridden: boolean;
+  attunedItemIds: string[];
+  attunedItemNames: string[];
 }
 
 export interface ComputedInventorySummary {
@@ -91,6 +169,7 @@ export interface ComputedInventorySummary {
   totalWeight: number;
   equippedArmorName: string | null;
   equippedShieldName: string | null;
+  attunement: ComputedAttunementSummary;
 }
 
 export interface ComputedDnd5e2014Snapshot {
@@ -116,6 +195,9 @@ export interface ComputedDnd5e2014Snapshot {
     armorClass: ComputedArmorClass;
     initiative: number;
     hitDiceDisplay: string | null;
+    totalHitDice: number;
+    availableHitDice: number;
+    attacks: ComputedAttack[];
   };
   spellcasting: ComputedSpellcasting | null;
   resources: ComputedCharacterResource[];
@@ -184,8 +266,10 @@ export function computeSavingThrows(
     const abilityMod = abilityMods[ability] ?? 0;
     const proficiencyApplied = proficient ? proficiencyBonus : 0;
     const rawOverride = sheet.savingThrows.overrides[ability];
-    const override = typeof rawOverride === 'number' && Number.isFinite(rawOverride) ? rawOverride : null;
+    const override =
+      typeof rawOverride === 'number' && Number.isFinite(rawOverride) ? rawOverride : null;
     const total = override !== null ? override : abilityMod + proficiencyApplied;
+    const rollMode: RollMode = sheet.savingThrows.rollModes?.[ability] ?? 'normal';
 
     return {
       ability,
@@ -196,6 +280,7 @@ export function computeSavingThrows(
       proficiencyApplied,
       override,
       total,
+      rollMode,
     };
   });
 }
@@ -230,8 +315,10 @@ export function computeSkills(
 
     const abilityMod = abilityMods[skill.ability] ?? 0;
     const rawOverride = sheet.skills.overrides[skill.id];
-    const override = typeof rawOverride === 'number' && Number.isFinite(rawOverride) ? rawOverride : null;
+    const override =
+      typeof rawOverride === 'number' && Number.isFinite(rawOverride) ? rawOverride : null;
     const total = override !== null ? override : abilityMod + proficiencyApplied;
+    const rollMode: RollMode = sheet.skills.rollModes?.[skill.id] ?? 'normal';
 
     return {
       id: skill.id,
@@ -243,6 +330,7 @@ export function computeSkills(
       proficiencyApplied,
       override,
       total,
+      rollMode,
     };
   });
 }
@@ -321,8 +409,60 @@ export function computeArmorClass(
   return {
     value: base,
     isOverridden: false,
-    sourceDescription: equippedShield ? `Sense armadura + ${equippedShield.name}` : 'Sense armadura (10 + DES)',
+    sourceDescription: equippedShield
+      ? `Sense armadura + ${equippedShield.name}`
+      : 'Sense armadura (10 + DES)',
   };
+}
+
+function highestSlotLevel(slotsRow: readonly number[] | undefined): number {
+  if (!slotsRow) return 0;
+  for (let i = slotsRow.length - 1; i >= 0; i--) {
+    if (slotsRow[i] > 0) return i + 1;
+  }
+  return 0;
+}
+
+function getMaxClassSpellLevel(progression: CasterProgression, classLevel: number): number {
+  const safeClassLevel = Math.min(20, Math.max(1, Math.floor(classLevel)));
+  if (progression === 'full') {
+    return highestSlotLevel(FULL_CASTER_SLOTS_2014[safeClassLevel - 1]);
+  }
+  if (progression === 'half') {
+    if (safeClassLevel < 2) return 0;
+    return highestSlotLevel(FULL_CASTER_SLOTS_2014[Math.ceil(safeClassLevel / 2) - 1]);
+  }
+  if (progression === 'third') {
+    if (safeClassLevel < 3) return 0;
+    return highestSlotLevel(FULL_CASTER_SLOTS_2014[Math.floor((safeClassLevel + 2) / 3) - 1]);
+  }
+  if (progression === 'pact') {
+    if (safeClassLevel >= 17) return 9;
+    if (safeClassLevel >= 15) return 8;
+    if (safeClassLevel >= 13) return 7;
+    if (safeClassLevel >= 11) return 6;
+    return PACT_MAGIC_SLOTS_2014[safeClassLevel - 1].slotLevel;
+  }
+  return 0;
+}
+
+function calculateClassPreparedLimit(
+  classId: string,
+  model: SpellcastingModel,
+  classLevel: number,
+  abilityMod: number
+): number | null {
+  if (model !== 'prepared' && model !== 'spellbook') {
+    return null;
+  }
+  if (classId === 'cleric' || classId === 'druid' || classId === 'wizard') {
+    return Math.max(1, abilityMod + classLevel);
+  }
+  if (classId === 'paladin') {
+    if (classLevel < 2) return null;
+    return Math.max(1, abilityMod + Math.floor(classLevel / 2));
+  }
+  return null;
 }
 
 export function computeSpellcasting(
@@ -333,53 +473,134 @@ export function computeSpellcasting(
   let effectiveCasterLevel = 0;
   let warlockLevel = 0;
   let usesSpellbook = sheet.spellcasting.usesSpellbook;
-  let inferredAbility: AbilityKey | null = null;
   let nonPactCasters = 0;
 
-  const casterDetails: Array<{ prog: CasterProgression; level: number; ability: AbilityKey | null }> =
-    [];
+  const casterDetails: Array<{ prog: CasterProgression; level: number }> = [];
+  const sources: ComputedSpellcastingSource[] = [];
 
   for (const cls of sheet.raceAndClass.classes) {
     const classMeta = getClassEntry(cls.classId);
     const subclassMeta = getSubclassEntry(cls.subclassId);
-    const prog = subclassMeta?.casterProgression ?? classMeta?.casterProgression ?? 'none';
-    const ability = subclassMeta?.spellcastingAbility ?? classMeta?.spellcastingAbility ?? null;
-    const level = Math.max(1, Math.floor(cls.level));
+    const level = Math.min(MAX_OFFICIAL_LEVEL_2014, Math.max(MIN_OFFICIAL_LEVEL_2014, Math.floor(cls.level)));
+    const resolved = resolveEffectiveClassSpellcasting(cls.classId, cls.subclassId, level);
 
-    if (classMeta?.usesSpellbook) {
+    if (resolved.usesSpellbook) {
       usesSpellbook = true;
     }
 
-    if (prog !== 'none') {
-      if (!inferredAbility && ability) {
-        inferredAbility = ability;
-      }
-      if (prog === 'pact') {
-        warlockLevel += level;
-      } else {
-        nonPactCasters += 1;
-        casterDetails.push({ prog, level, ability });
-      }
+    if (!resolved.isActiveCaster) {
+      continue;
+    }
+
+    const effectiveAbility = sheet.spellcasting.abilityOverride ?? resolved.ability;
+    const abilityMod = effectiveAbility ? (abilityMods[effectiveAbility] ?? 0) : 0;
+
+    const saveDc =
+      sheet.spellcasting.saveDcOverride !== null
+        ? sheet.spellcasting.saveDcOverride
+        : effectiveAbility
+          ? 8 + proficiencyBonus + abilityMod
+          : null;
+    const attackBonus =
+      sheet.spellcasting.attackBonusOverride !== null
+        ? sheet.spellcasting.attackBonusOverride
+        : effectiveAbility
+          ? proficiencyBonus + abilityMod
+          : null;
+
+    sources.push({
+      classId: cls.classId,
+      classLabelCa: cls.customClassName?.trim() || classMeta?.labelCa || cls.classId,
+      subclassId: cls.subclassId ?? null,
+      subclassLabelCa: cls.customSubclassName?.trim() || subclassMeta?.labelCa || null,
+      classLevel: level,
+      progression: resolved.progression,
+      model: resolved.model,
+      ability: effectiveAbility,
+      abilityLabelCa: effectiveAbility ? ABILITY_LABELS_CA[effectiveAbility] : null,
+      saveDc,
+      attackBonus,
+      usesSpellbook: resolved.usesSpellbook,
+      maxClassSpellLevel: getMaxClassSpellLevel(resolved.progression, level),
+      preparedLimit: calculateClassPreparedLimit(cls.classId, resolved.model, level, abilityMod),
+      preparedCount: 0,
+      alwaysPreparedCount: 0,
+      spellbookCount: 0,
+      knownCount: 0,
+      exceedsPreparedLimit: false,
+    });
+
+    if (resolved.progression === 'pact') {
+      warlockLevel += level;
+    } else {
+      nonPactCasters += 1;
+      casterDetails.push({ prog: resolved.progression, level });
     }
   }
 
-  // Single-class vs multiclass caster level calculation per PHB 2014
+  // Single-class vs multiclass caster level calculation per PHB 2014 p. 164-165
   for (const item of casterDetails) {
     if (item.prog === 'full') {
       effectiveCasterLevel += item.level;
     } else if (item.prog === 'half') {
-      if (nonPactCasters === 1) {
-        effectiveCasterLevel += item.level >= 2 ? Math.ceil(item.level / 2) : 0;
-      } else {
-        effectiveCasterLevel += Math.floor(item.level / 2);
-      }
+      effectiveCasterLevel +=
+        nonPactCasters === 1 ? Math.ceil(item.level / 2) : Math.floor(item.level / 2);
     } else if (item.prog === 'third') {
-      if (nonPactCasters === 1) {
-        effectiveCasterLevel += item.level >= 3 ? Math.ceil(item.level / 3) : 0;
-      } else {
-        effectiveCasterLevel += Math.floor(item.level / 3);
+      effectiveCasterLevel +=
+        nonPactCasters === 1
+          ? Math.floor((item.level + 2) / 3)
+          : Math.floor(item.level / 3);
+    }
+  }
+
+  // Attribute each spell to its source class (or special source) without conflating spellbook vs prepared
+  const sourceByClassId = new Map(sources.map((s) => [s.classId, s]));
+  const spellbookSource = sources.find((s) => s.usesSpellbook);
+  const warlockSource = sources.find((s) => s.progression === 'pact');
+  let specialSpellsCount = 0;
+
+  for (const spell of sheet.spells) {
+    if (spell.sourceType !== 'class' && spell.sourceType !== 'pact') {
+      specialSpellsCount += 1;
+      continue;
+    }
+
+    let target: ComputedSpellcastingSource | undefined;
+    if (spell.sourceClassId && sourceByClassId.has(spell.sourceClassId)) {
+      target = sourceByClassId.get(spell.sourceClassId);
+    } else if (spell.sourceType === 'pact' && warlockSource) {
+      target = warlockSource;
+    } else if (sources.length === 1) {
+      target = sources[0];
+    } else if (spell.inSpellbook && spellbookSource) {
+      target = spellbookSource;
+    } else {
+      target = sources[0];
+    }
+
+    if (!target) {
+      continue;
+    }
+
+    if (spell.inSpellbook) {
+      target.spellbookCount += 1;
+    }
+
+    if (spell.level >= 1) {
+      if (spell.alwaysPrepared) {
+        target.alwaysPreparedCount += 1;
+      } else if (spell.prepared) {
+        target.preparedCount += 1;
+      }
+
+      if (target.model === 'known' || target.model === 'pact') {
+        target.knownCount += 1;
       }
     }
+  }
+
+  for (const src of sources) {
+    src.exceedsPreparedLimit = src.preparedLimit !== null && src.preparedCount > src.preparedLimit;
   }
 
   const hasOverrides =
@@ -389,15 +610,15 @@ export function computeSpellcasting(
     Object.keys(sheet.spellSlotOverrides).length > 0;
 
   if (
-    effectiveCasterLevel === 0 &&
-    warlockLevel === 0 &&
+    sources.length === 0 &&
     !hasOverrides &&
     sheet.spells.length === 0
   ) {
     return null;
   }
 
-  const ability = sheet.spellcasting.abilityOverride ?? inferredAbility;
+  const primarySource = sources.find((s) => s.progression !== 'pact') ?? sources[0];
+  const ability = sheet.spellcasting.abilityOverride ?? primarySource?.ability ?? null;
   const spellMod = ability ? (abilityMods[ability] ?? 0) : 0;
   const saveDc =
     sheet.spellcasting.saveDcOverride !== null
@@ -445,6 +666,9 @@ export function computeSpellcasting(
     };
   }
 
+  const totalSpellbookCount = sources.reduce((sum, s) => sum + s.spellbookCount, 0);
+  const totalPreparedCount = sources.reduce((sum, s) => sum + s.preparedCount, 0);
+
   return {
     ability,
     abilityLabelCa: ability ? ABILITY_LABELS_CA[ability] : null,
@@ -454,7 +678,64 @@ export function computeSpellcasting(
     effectiveCasterLevel,
     slots,
     pactMagic,
+    sources,
+    specialSpellsCount,
+    totalSpellbookCount,
+    totalPreparedCount,
   };
+}
+
+function getNewSpellCircleUnlocksForClass(
+  progression: CasterProgression
+): Array<{ level: number; titleCa: string; descriptionCa: string }> {
+  if (progression === 'full') {
+    return [3, 5, 7, 9, 11, 13, 15, 17].map((lvl) => {
+      const circle = Math.ceil(lvl / 2);
+      return {
+        level: lvl,
+        titleCa: `Espais de conjur de cercle ${circle}`,
+        descriptionCa: `Desbloqueja espais i conjurs de ${circle}è nivell en assolir el nivell ${lvl} de classe.`,
+      };
+    });
+  }
+  if (progression === 'half') {
+    return [
+      { level: 2, circle: 1 },
+      { level: 5, circle: 2 },
+      { level: 9, circle: 3 },
+      { level: 13, circle: 4 },
+      { level: 17, circle: 5 },
+    ].map(({ level, circle }) => ({
+      level,
+      titleCa: `Espais de conjur de cercle ${circle}`,
+      descriptionCa: `Accés a conjurs de ${circle}r/è cercle al nivell ${level} de classe.`,
+    }));
+  }
+  if (progression === 'third') {
+    return [
+      { level: 3, circle: 1 },
+      { level: 7, circle: 2 },
+      { level: 13, circle: 3 },
+      { level: 19, circle: 4 },
+    ].map(({ level, circle }) => ({
+      level,
+      titleCa: `Espais de conjur de cercle ${circle}`,
+      descriptionCa: `Accés a conjurs de ${circle}r/è cercle al nivell ${level} de classe.`,
+    }));
+  }
+  if (progression === 'pact') {
+    return [
+      { level: 3, titleCa: 'Espais de Pacte nivell 2', descriptionCa: 'Els espais de Pacte passen a 2n cercle.' },
+      { level: 5, titleCa: 'Espais de Pacte nivell 3', descriptionCa: 'Els espais de Pacte passen a 3r cercle.' },
+      { level: 7, titleCa: 'Espais de Pacte nivell 4', descriptionCa: 'Els espais de Pacte passen a 4t cercle.' },
+      { level: 9, titleCa: 'Espais de Pacte nivell 5', descriptionCa: 'Els espais de Pacte passen a 5è cercle.' },
+      { level: 11, titleCa: 'Arcanum místic (6è cercle)', descriptionCa: 'Un llançament diari de conjur de 6è cercle.' },
+      { level: 13, titleCa: 'Arcanum místic (7è cercle)', descriptionCa: 'Un llançament diari de conjur de 7è cercle.' },
+      { level: 15, titleCa: 'Arcanum místic (8è cercle)', descriptionCa: 'Un llançament diari de conjur de 8è cercle.' },
+      { level: 17, titleCa: 'Arcanum místic (9è cercle)', descriptionCa: 'Un llançament diari de conjur de 9è cercle.' },
+    ];
+  }
+  return [];
 }
 
 export function computeProgression(
@@ -467,6 +748,9 @@ export function computeProgression(
   );
   const xp = Math.max(0, Math.floor(sheet.progression.experiencePoints ?? 0));
   const isMaxLevel = safeLevel >= MAX_OFFICIAL_LEVEL_2014;
+  const maxLevelMessageCa = isMaxLevel
+    ? 'S’ha assolit el nivell màxim oficial (20) de D&D 5e (2014).'
+    : null;
 
   const currentLevelMinXp = XP_THRESHOLDS_2014[safeLevel - 1] ?? 0;
   const nextLevel = isMaxLevel ? null : safeLevel + 1;
@@ -480,17 +764,149 @@ export function computeProgression(
     progressPercent = Math.min(100, Math.round((gained / span) * 100));
   }
 
+  const remainingCharacterLevels = MAX_OFFICIAL_LEVEL_2014 - safeLevel;
   const unlockedAsiDetails: Array<{ classLabel: string; level: number }> = [];
-  for (const cls of sheet.raceAndClass.classes) {
-    const classMeta = getClassEntry(cls.classId);
-    const classLabel = cls.customClassName?.trim() || classMeta?.labelCa || cls.classId;
-    const asiLevels = classMeta?.asiLevels ?? [4, 8, 12, 16, 19];
-    for (const asiLvl of asiLevels) {
-      if (cls.level >= asiLvl) {
-        unlockedAsiDetails.push({ classLabel, level: asiLvl });
+  const classProgressions: ComputedClassProgression[] = [];
+  const upcomingMilestones: ComputedProgressionMilestone[] = [];
+
+  if (!isMaxLevel) {
+    for (const threshold of [5, 9, 13, 17]) {
+      if (threshold > safeLevel) {
+        upcomingMilestones.push({
+          scope: 'character',
+          classId: null,
+          classLabelCa: null,
+          targetTotalLevel: threshold,
+          targetClassLevel: null,
+          levelsRemaining: threshold - safeLevel,
+          category: 'proficiency_bonus',
+          titleCa: `Bonificació de competència +${calculateProficiencyBonus(threshold)}`,
+          descriptionCa: `En assolir el nivell total ${threshold}, la bonificació de competència puja a +${calculateProficiencyBonus(threshold)}.`,
+        });
       }
     }
   }
+
+  for (const cls of sheet.raceAndClass.classes) {
+    const classLevel = Math.min(
+      MAX_OFFICIAL_LEVEL_2014,
+      Math.max(MIN_OFFICIAL_LEVEL_2014, Math.floor(cls.level))
+    );
+    const classMeta = getClassEntry(cls.classId);
+    const subclassMeta = getSubclassEntry(cls.subclassId);
+    const classLabel = cls.customClassName?.trim() || classMeta?.labelCa || cls.classId;
+    const subclassLabel = cls.customSubclassName?.trim() || subclassMeta?.labelCa || null;
+    const asiLevels = classMeta?.asiLevels ?? [4, 8, 12, 16, 19];
+
+    const unlockedAsiForClass: number[] = [];
+    for (const asiLvl of asiLevels) {
+      if (classLevel >= asiLvl) {
+        unlockedAsiForClass.push(asiLvl);
+        unlockedAsiDetails.push({ classLabel, level: asiLvl });
+      }
+    }
+
+    const maxReachableClassLevel = Math.min(
+      MAX_OFFICIAL_LEVEL_2014,
+      classLevel + remainingCharacterLevels
+    );
+    const nextAsiLevel =
+      asiLevels.find((lvl) => lvl > classLevel && lvl <= maxReachableClassLevel) ?? null;
+
+    classProgressions.push({
+      classId: cls.classId,
+      classLabelCa: classLabel,
+      subclassLabelCa: subclassLabel,
+      level: classLevel,
+      hitDie: classMeta?.hitDie ?? null,
+      averageHpPerLevel: classMeta ? getHitDieAverageGain(classMeta.hitDie) : null,
+      subclassUnlocked: classMeta ? classLevel >= classMeta.subclassLevel : true,
+      subclassLevel: classMeta?.subclassLevel ?? null,
+      unlockedAsiLevels: unlockedAsiForClass,
+      nextAsiLevel,
+    });
+
+    if (isMaxLevel || !classMeta) {
+      continue;
+    }
+
+    // Subclass unlock milestone
+    if (
+      classLevel < classMeta.subclassLevel &&
+      classMeta.subclassLevel <= maxReachableClassLevel
+    ) {
+      const delta = classMeta.subclassLevel - classLevel;
+      upcomingMilestones.push({
+        scope: 'class',
+        classId: cls.classId,
+        classLabelCa: classLabel,
+        targetTotalLevel: safeLevel + delta,
+        targetClassLevel: classMeta.subclassLevel,
+        levelsRemaining: delta,
+        category: 'subclass',
+        titleCa: `Elecció de subclasse de ${classLabel}`,
+        descriptionCa: `Al nivell ${classMeta.subclassLevel} de ${classLabel} desbloqueges la teva especialització oficial.`,
+      });
+    }
+
+    // ASI milestones
+    for (const asiLvl of asiLevels) {
+      if (asiLvl > classLevel && asiLvl <= maxReachableClassLevel) {
+        const delta = asiLvl - classLevel;
+        upcomingMilestones.push({
+          scope: 'class',
+          classId: cls.classId,
+          classLabelCa: classLabel,
+          targetTotalLevel: safeLevel + delta,
+          targetClassLevel: asiLvl,
+          levelsRemaining: delta,
+          category: 'asi',
+          titleCa: `Millora de característica o dot (${classLabel} ${asiLvl})`,
+          descriptionCa: '+2 a una característica o +1 a dues (màx. 20) o tria un dot segons regles de campanya.',
+        });
+      }
+    }
+
+    // Spell circle milestones
+    const effectiveCasterProg =
+      subclassMeta?.casterProgression ?? classMeta.casterProgression;
+    for (const circleUnlock of getNewSpellCircleUnlocksForClass(effectiveCasterProg)) {
+      if (circleUnlock.level > classLevel && circleUnlock.level <= maxReachableClassLevel) {
+        const delta = circleUnlock.level - classLevel;
+        upcomingMilestones.push({
+          scope: 'class',
+          classId: cls.classId,
+          classLabelCa: classLabel,
+          targetTotalLevel: safeLevel + delta,
+          targetClassLevel: circleUnlock.level,
+          levelsRemaining: delta,
+          category: 'spell_circle',
+          titleCa: `${circleUnlock.titleCa} (${classLabel} ${circleUnlock.level})`,
+          descriptionCa: circleUnlock.descriptionCa,
+        });
+      }
+    }
+
+    // Key class feature milestones
+    for (const feature of classMeta.keyFeatureMilestones) {
+      if (feature.level > classLevel && feature.level <= maxReachableClassLevel) {
+        const delta = feature.level - classLevel;
+        upcomingMilestones.push({
+          scope: 'class',
+          classId: cls.classId,
+          classLabelCa: classLabel,
+          targetTotalLevel: safeLevel + delta,
+          targetClassLevel: feature.level,
+          levelsRemaining: delta,
+          category: 'class_feature',
+          titleCa: `${feature.titleCa} (${classLabel} ${feature.level})`,
+          descriptionCa: feature.descriptionCa,
+        });
+      }
+    }
+  }
+
+  upcomingMilestones.sort((a, b) => a.levelsRemaining - b.levelsRemaining);
 
   return {
     totalLevel: safeLevel,
@@ -501,8 +917,11 @@ export function computeProgression(
     xpToNextLevel,
     progressPercent,
     isMaxLevel,
+    maxLevelMessageCa,
     unlockedAsiCount: unlockedAsiDetails.length,
     unlockedAsiDetails,
+    classProgressions,
+    upcomingMilestones,
   };
 }
 
@@ -534,6 +953,9 @@ export function computeDnd5e2014Sheet(sheet: Dnd5e2014SheetData): ComputedDnd5e2
       ? sheet.initiative.override
       : (abilityMods.dex ?? 0) + (sheet.initiative.bonus ?? 0);
 
+  const attacks = computeAttacks(sheet, abilityMods, proficiencyBonus);
+  const availableHitDice = Math.max(0, totalLevel - Math.max(0, sheet.hitPoints.hitDiceUsed));
+
   const spellcasting = computeSpellcasting(sheet, abilityMods, proficiencyBonus);
   const resources = computeCharacterResources(sheet, abilityMods, proficiencyBonus);
   const progression = computeProgression(sheet, totalLevel);
@@ -545,6 +967,9 @@ export function computeDnd5e2014Sheet(sheet: Dnd5e2014SheetData): ComputedDnd5e2
   );
   const equippedArmor = sheet.inventory.find((i) => i.equipped && i.category === 'armor');
   const equippedShield = sheet.inventory.find((i) => i.equipped && i.category === 'shield');
+
+  const attunedItems = sheet.inventory.filter((i) => i.requiresAttunement && i.attuned);
+  const maxAttunementSlots = sheet.attunement?.limitOverride ?? DEFAULT_ATTUNEMENT_LIMIT_2014;
 
   return {
     totalLevel,
@@ -568,6 +993,9 @@ export function computeDnd5e2014Sheet(sheet: Dnd5e2014SheetData): ComputedDnd5e2
       armorClass,
       initiative,
       hitDiceDisplay: buildHitDiceDisplay(sheet),
+      totalHitDice: totalLevel,
+      availableHitDice,
+      attacks,
     },
     spellcasting,
     resources,
@@ -577,6 +1005,14 @@ export function computeDnd5e2014Sheet(sheet: Dnd5e2014SheetData): ComputedDnd5e2
       totalWeight: Math.round(totalWeight * 100) / 100,
       equippedArmorName: equippedArmor?.name ?? null,
       equippedShieldName: equippedShield?.name ?? null,
+      attunement: {
+        attunedCount: attunedItems.length,
+        maxSlots: maxAttunementSlots,
+        availableSlots: Math.max(0, maxAttunementSlots - attunedItems.length),
+        isOverridden: sheet.attunement?.limitOverride !== null && sheet.attunement?.limitOverride !== undefined,
+        attunedItemIds: attunedItems.map((i) => i.id),
+        attunedItemNames: attunedItems.map((i) => i.name),
+      },
     },
   };
 }

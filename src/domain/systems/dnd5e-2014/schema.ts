@@ -8,13 +8,23 @@ import {
   type AbilityKey,
   type SkillId,
 } from './catalog';
+import type { RollMode } from './dice';
 
 export type Dnd5e2014AbilityScores = Record<AbilityKey, number | null>;
 
 export type ResourceRecovery = 'short_rest' | 'long_rest' | 'dawn' | 'other';
 
-export type InventoryCategory = 'weapon' | 'armor' | 'shield' | 'gear' | 'treasure' | 'custom';
+export type InventoryCategory =
+  | 'weapon'
+  | 'armor'
+  | 'shield'
+  | 'gear'
+  | 'magic_item'
+  | 'treasure'
+  | 'custom';
 export type ArmorType = 'light' | 'medium' | 'heavy';
+
+export type SpellSourceType = 'class' | 'pact' | 'feature' | 'race' | 'item' | 'custom';
 
 export interface Dnd5e2014ClassEntry {
   classId: string;
@@ -26,6 +36,7 @@ export interface Dnd5e2014ClassEntry {
 
 export interface Dnd5e2014AttackEntry {
   id: string;
+  inventoryItemId: string | null;
   name: string;
   ability: AbilityKey | null;
   proficient: boolean;
@@ -33,6 +44,7 @@ export interface Dnd5e2014AttackEntry {
   attackBonus: string | null;
   damage: string | null;
   damageType: string | null;
+  range: string | null;
   notes: string;
 }
 
@@ -46,6 +58,14 @@ export interface Dnd5e2014InventoryItem {
   armorType: ArmorType | null;
   baseAc: number | null;
   acBonus: number | null;
+  requiresAttunement: boolean;
+  attuned: boolean;
+  weaponAbility: AbilityKey | null;
+  weaponProficient: boolean;
+  damage: string | null;
+  damageType: string | null;
+  weaponRange: string | null;
+  weaponProperties: string;
   notes: string;
 }
 
@@ -61,6 +81,14 @@ export interface Dnd5e2014SpellEntry {
   id: string;
   level: number;
   name: string;
+  castingTime: string;
+  range: string;
+  components: string;
+  duration: string;
+  school: string | null;
+  sourceType: SpellSourceType;
+  sourceClassId: string | null;
+  alwaysPrepared: boolean;
   prepared: boolean;
   inSpellbook: boolean;
   ritual: boolean;
@@ -88,11 +116,22 @@ export interface Dnd5e2014AsiEntry {
   notes: string;
 }
 
+export interface Dnd5e2014LevelHistoryEntry {
+  id: string;
+  level: number;
+  classId: string;
+  customClassName: string | null;
+  subclassId: string | null;
+  hpGain: number | null;
+  notes: string;
+  date: string;
+}
+
 /**
  * Universal raw data schema (v2) for any D&D 5e (2014) character.
  * Stores raw player/GM inputs ONLY. All modifiers, proficiency bonuses, AC,
  * skills, saving throws, spell DCs, slot maximums, and class resource maximums
- * are computed dynamically by the rules engine (`rules.ts` & `resources.ts`).
+ * are computed dynamically by the rules engine (`rules.ts`, `attacks.ts` & `resources.ts`).
  */
 export interface Dnd5e2014SheetData extends Record<string, unknown> {
   generalInfo: {
@@ -101,6 +140,8 @@ export interface Dnd5e2014SheetData extends Record<string, unknown> {
     alignment: string | null;
     faith: string | null;
     age: string | null;
+    size: string | null;
+    senses: string | null;
     appearanceNotes: string;
   };
   raceAndClass: {
@@ -112,12 +153,14 @@ export interface Dnd5e2014SheetData extends Record<string, unknown> {
   savingThrows: {
     proficient: AbilityKey[];
     overrides: Partial<Record<AbilityKey, number>>;
+    rollModes: Partial<Record<AbilityKey, RollMode>>;
   };
   skills: {
     proficient: SkillId[];
     expertise: SkillId[];
     halfProficient: boolean;
     overrides: Partial<Record<SkillId, number>>;
+    rollModes: Partial<Record<SkillId, RollMode>>;
   };
   proficiencies: {
     armor: string[];
@@ -153,6 +196,9 @@ export interface Dnd5e2014SheetData extends Record<string, unknown> {
   };
   attacks: Dnd5e2014AttackEntry[];
   inventory: Dnd5e2014InventoryItem[];
+  attunement: {
+    limitOverride: number | null;
+  };
   currency: {
     cp: number;
     sp: number;
@@ -178,6 +224,7 @@ export interface Dnd5e2014SheetData extends Record<string, unknown> {
     experiencePoints: number;
     inspiration: boolean;
     abilityScoreImprovements: Dnd5e2014AsiEntry[];
+    levelHistory: Dnd5e2014LevelHistoryEntry[];
   };
   background: {
     backgroundName: string | null;
@@ -220,6 +267,8 @@ export function createEmptyDnd5e2014Sheet(characterName: string): Dnd5e2014Sheet
       alignment: null,
       faith: null,
       age: null,
+      size: null,
+      senses: null,
       appearanceNotes: '',
     },
     raceAndClass: {
@@ -238,12 +287,14 @@ export function createEmptyDnd5e2014Sheet(characterName: string): Dnd5e2014Sheet
     savingThrows: {
       proficient: [],
       overrides: {},
+      rollModes: {},
     },
     skills: {
       proficient: [],
       expertise: [],
       halfProficient: false,
       overrides: {},
+      rollModes: {},
     },
     proficiencies: {
       armor: [],
@@ -279,6 +330,9 @@ export function createEmptyDnd5e2014Sheet(characterName: string): Dnd5e2014Sheet
     },
     attacks: [],
     inventory: [],
+    attunement: {
+      limitOverride: null,
+    },
     currency: {
       cp: 0,
       sp: 0,
@@ -304,6 +358,7 @@ export function createEmptyDnd5e2014Sheet(characterName: string): Dnd5e2014Sheet
       experiencePoints: 0,
       inspiration: false,
       abilityScoreImprovements: [],
+      levelHistory: [],
     },
     background: {
       backgroundName: null,
@@ -355,10 +410,33 @@ function clampOfficialLevel(raw: number): number {
 
 const VALID_ABILITY_SET = new Set<string>(ABILITY_KEYS);
 const VALID_SKILL_SET = new Set<string>(DND5E_SKILLS.map((s) => s.id));
+const VALID_SPELL_SOURCE_SET = new Set<string>([
+  'class',
+  'pact',
+  'feature',
+  'race',
+  'item',
+  'custom',
+]);
+
+function normalizeRollModeMap<TKey extends string>(
+  raw: unknown,
+  validKeySet: Set<string>
+): Partial<Record<TKey, RollMode>> {
+  const obj = asObj(raw);
+  const out: Partial<Record<TKey, RollMode>> = {};
+  for (const [k, v] of Object.entries(obj)) {
+    if (!validKeySet.has(k)) continue;
+    if (v === 'advantage' || v === 'disadvantage' || v === 'normal') {
+      out[k as TKey] = v;
+    }
+  }
+  return out;
+}
 
 /**
- * Normalizes any persisted sheet payload (including Phase 1–2 v1 skeletons) into a valid v2
- * D&D 5e (2014) sheet object without dropping user data.
+ * Normalizes any persisted sheet payload (including Phase 1–2 v1 skeletons and earlier v2 sheets)
+ * into a valid universal v2 D&D 5e (2014) sheet object without dropping user data.
  */
 export function normalizeDnd5e2014Sheet(raw: unknown, fallbackName: string): Dnd5e2014SheetData {
   const base = createEmptyDnd5e2014Sheet(fallbackName);
@@ -371,6 +449,8 @@ export function normalizeDnd5e2014Sheet(raw: unknown, fallbackName: string): Dnd
     alignment: asNullableStr(generalInfo.alignment),
     faith: asNullableStr(generalInfo.faith),
     age: asNullableStr(generalInfo.age),
+    size: asNullableStr(generalInfo.size),
+    senses: asNullableStr(generalInfo.senses),
     appearanceNotes: asStr(generalInfo.appearanceNotes),
   };
 
@@ -420,6 +500,10 @@ export function normalizeDnd5e2014Sheet(raw: unknown, fallbackName: string): Dnd
     const val = asNullableNum(stOverrides[key]);
     if (val !== null) base.savingThrows.overrides[key] = val;
   }
+  base.savingThrows.rollModes = normalizeRollModeMap<AbilityKey>(
+    savingThrows.rollModes,
+    VALID_ABILITY_SET
+  );
 
   const skills = asObj(src.skills);
   base.skills.proficient = asStrArray(skills.proficient).filter((k): k is SkillId =>
@@ -434,6 +518,7 @@ export function normalizeDnd5e2014Sheet(raw: unknown, fallbackName: string): Dnd
     const val = asNullableNum(skOverrides[skillId]);
     if (val !== null) base.skills.overrides[skillId as SkillId] = val;
   }
+  base.skills.rollModes = normalizeRollModeMap<SkillId>(skills.rollModes, VALID_SKILL_SET);
 
   const profs = asObj(src.proficiencies);
   base.proficiencies = {
@@ -482,9 +567,13 @@ export function normalizeDnd5e2014Sheet(raw: unknown, fallbackName: string): Dnd
   if (Array.isArray(src.attacks)) {
     base.attacks = src.attacks.map((rawAtk, idx) => {
       const a = asObj(rawAtk);
-      const ab = typeof a.ability === 'string' && VALID_ABILITY_SET.has(a.ability) ? (a.ability as AbilityKey) : null;
+      const ab =
+        typeof a.ability === 'string' && VALID_ABILITY_SET.has(a.ability)
+          ? (a.ability as AbilityKey)
+          : null;
       return {
         id: asStr(a.id, `atk-${idx + 1}`),
+        inventoryItemId: asNullableStr(a.inventoryItemId),
         name: asStr(a.name),
         ability: ab,
         proficient: asBool(a.proficient, true),
@@ -492,6 +581,7 @@ export function normalizeDnd5e2014Sheet(raw: unknown, fallbackName: string): Dnd
         attackBonus: asNullableStr(a.attackBonus),
         damage: asNullableStr(a.damage),
         damageType: asNullableStr(a.damageType),
+        range: asNullableStr(a.range),
         notes: asStr(a.notes),
       };
     });
@@ -502,6 +592,11 @@ export function normalizeDnd5e2014Sheet(raw: unknown, fallbackName: string): Dnd
       const item = asObj(rawItem);
       const cat = item.category;
       const armorT = item.armorType;
+      const wAb =
+        typeof item.weaponAbility === 'string' && VALID_ABILITY_SET.has(item.weaponAbility)
+          ? (item.weaponAbility as AbilityKey)
+          : null;
+      const requiresAttunement = asBool(item.requiresAttunement, false);
       return {
         id: asStr(item.id, `item-${idx + 1}`),
         name: asStr(item.name),
@@ -510,6 +605,7 @@ export function normalizeDnd5e2014Sheet(raw: unknown, fallbackName: string): Dnd
           cat === 'armor' ||
           cat === 'shield' ||
           cat === 'gear' ||
+          cat === 'magic_item' ||
           cat === 'treasure' ||
           cat === 'custom'
             ? cat
@@ -520,10 +616,24 @@ export function normalizeDnd5e2014Sheet(raw: unknown, fallbackName: string): Dnd
         armorType: armorT === 'light' || armorT === 'medium' || armorT === 'heavy' ? armorT : null,
         baseAc: asNullableNum(item.baseAc),
         acBonus: asNullableNum(item.acBonus),
+        requiresAttunement,
+        attuned: requiresAttunement ? asBool(item.attuned, false) : false,
+        weaponAbility: wAb,
+        weaponProficient: asBool(item.weaponProficient, false),
+        damage: asNullableStr(item.damage),
+        damageType: asNullableStr(item.damageType),
+        weaponRange: asNullableStr(item.weaponRange),
+        weaponProperties: asStr(item.weaponProperties),
         notes: asStr(item.notes),
       };
     });
   }
+
+  const attunementObj = asObj(src.attunement);
+  const rawAttuneLimit = asNullableNum(attunementObj.limitOverride);
+  base.attunement = {
+    limitOverride: rawAttuneLimit !== null ? Math.max(0, Math.floor(rawAttuneLimit)) : null,
+  };
 
   const curr = asObj(src.currency);
   base.currency = {
@@ -562,10 +672,21 @@ export function normalizeDnd5e2014Sheet(raw: unknown, fallbackName: string): Dnd
   if (Array.isArray(src.spells)) {
     base.spells = src.spells.map((rawS, idx) => {
       const s = asObj(rawS);
+      const rawSource = typeof s.sourceType === 'string' ? s.sourceType : 'class';
       return {
         id: asStr(s.id, `spell-${idx + 1}`),
         level: Math.min(9, Math.max(0, Math.floor(asNum(s.level, 0)))),
         name: asStr(s.name),
+        castingTime: asStr(s.castingTime),
+        range: asStr(s.range),
+        components: asStr(s.components),
+        duration: asStr(s.duration),
+        school: asNullableStr(s.school),
+        sourceType: VALID_SPELL_SOURCE_SET.has(rawSource)
+          ? (rawSource as SpellSourceType)
+          : 'class',
+        sourceClassId: asNullableStr(s.sourceClassId),
+        alwaysPrepared: asBool(s.alwaysPrepared, false),
         prepared: asBool(s.prepared, false),
         inSpellbook: asBool(s.inSpellbook, false),
         ritual: asBool(s.ritual, false),
@@ -641,6 +762,23 @@ export function normalizeDnd5e2014Sheet(raw: unknown, fallbackName: string): Dnd
             notes: asStr(asi.notes),
           };
         })
+      : [],
+    levelHistory: Array.isArray(prog.levelHistory)
+      ? prog.levelHistory
+          .map((rawEntry, idx) => {
+            const h = asObj(rawEntry);
+            return {
+              id: asStr(h.id, `lh-${idx + 1}`),
+              level: clampOfficialLevel(asNum(h.level, 1)),
+              classId: asNullableStr(h.classId) ?? 'custom',
+              customClassName: asNullableStr(h.customClassName),
+              subclassId: asNullableStr(h.subclassId),
+              hpGain: asNullableNum(h.hpGain),
+              notes: asStr(h.notes),
+              date: asStr(h.date),
+            };
+          })
+          .sort((a, b) => a.level - b.level)
       : [],
   };
 

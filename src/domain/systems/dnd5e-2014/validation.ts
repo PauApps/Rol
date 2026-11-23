@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import {
   ABILITY_KEYS,
+  DEFAULT_ATTUNEMENT_LIMIT_2014,
   DND5E_CLASSES,
   MAX_OFFICIAL_LEVEL_2014,
   MIN_OFFICIAL_LEVEL_2014,
@@ -9,6 +10,7 @@ import {
   type AbilityKey,
   type SkillId,
 } from './catalog';
+import type { RollMode } from './dice';
 import {
   createEmptyDnd5e2014Sheet,
   type Dnd5e2014SheetData,
@@ -19,6 +21,7 @@ export type SpellSlotKey = (typeof SPELL_SLOT_KEYS)[number];
 
 const CANONICAL_CLASS_IDS = DND5E_CLASSES.map((c) => c.id);
 const CLASS_ID_VALUES: [string, ...string[]] = ['custom', ...CANONICAL_CLASS_IDS];
+const rollModeValueSchema = z.enum(['disadvantage', 'normal', 'advantage']);
 
 function nullableTrimmedString(maxLen: number) {
   return z
@@ -45,6 +48,16 @@ function stripUndefinedEntries(obj: Record<string, unknown>): Record<string, num
   return out;
 }
 
+function stripUndefinedRollModes(obj: Record<string, unknown>): Record<string, RollMode> {
+  const out: Record<string, RollMode> = {};
+  for (const [key, value] of Object.entries(obj)) {
+    if (value === 'disadvantage' || value === 'normal' || value === 'advantage') {
+      out[key] = value;
+    }
+  }
+  return out;
+}
+
 function buildFixedKeysNumberMap<TKey extends string>(
   keys: readonly TKey[],
   min: number,
@@ -64,6 +77,24 @@ function buildFixedKeysNullableNumberMap<TKey extends string>(
   max: number
 ) {
   const entrySchema = z.number().int().min(min).max(max).nullable().optional();
+  const shape = Object.fromEntries(keys.map((k) => [k, entrySchema])) as Record<
+    TKey,
+    typeof entrySchema
+  >;
+  return z.object(shape).strict();
+}
+
+function buildFixedKeysRollModeMap<TKey extends string>(keys: readonly TKey[]) {
+  const entrySchema = rollModeValueSchema.optional();
+  const shape = Object.fromEntries(keys.map((k) => [k, entrySchema])) as Record<
+    TKey,
+    typeof entrySchema
+  >;
+  return z.object(shape).strict().transform(stripUndefinedRollModes);
+}
+
+function buildFixedKeysNullableRollModeMap<TKey extends string>(keys: readonly TKey[]) {
+  const entrySchema = rollModeValueSchema.nullable().optional();
   const shape = Object.fromEntries(keys.map((k) => [k, entrySchema])) as Record<
     TKey,
     typeof entrySchema
@@ -137,6 +168,7 @@ const classListSchema = z
 export const dnd5e2014AttackEntrySchema = z
   .object({
     id: z.string().trim().min(1).max(80),
+    inventoryItemId: nullableTrimmedString(80).default(null),
     name: z.string().trim().min(1, 'El nom de l’atac és obligatori.').max(120),
     ability: z.enum(ABILITY_KEYS).nullable().default(null),
     proficient: z.boolean().default(true),
@@ -144,6 +176,7 @@ export const dnd5e2014AttackEntrySchema = z
     attackBonus: nullableTrimmedString(40).default(null),
     damage: nullableTrimmedString(80).default(null),
     damageType: nullableTrimmedString(60).default(null),
+    range: nullableTrimmedString(80).default(null),
     notes: z.string().max(1000).default(''),
   })
   .strict();
@@ -152,13 +185,23 @@ export const dnd5e2014InventoryItemSchema = z
   .object({
     id: z.string().trim().min(1).max(80),
     name: z.string().trim().min(1, 'El nom de l’objecte és obligatori.').max(120),
-    category: z.enum(['weapon', 'armor', 'shield', 'gear', 'treasure', 'custom']).default('gear'),
+    category: z
+      .enum(['weapon', 'armor', 'shield', 'gear', 'magic_item', 'treasure', 'custom'])
+      .default('gear'),
     quantity: z.number().min(0).max(100000).default(1),
     weight: z.number().min(0).max(100000).nullable().default(null),
     equipped: z.boolean().default(false),
     armorType: z.enum(['light', 'medium', 'heavy']).nullable().default(null),
     baseAc: z.number().int().min(1).max(25).nullable().default(null),
     acBonus: z.number().int().min(-5).max(10).nullable().default(null),
+    requiresAttunement: z.boolean().default(false),
+    attuned: z.boolean().default(false),
+    weaponAbility: z.enum(ABILITY_KEYS).nullable().default(null),
+    weaponProficient: z.boolean().default(false),
+    damage: nullableTrimmedString(80).default(null),
+    damageType: nullableTrimmedString(60).default(null),
+    weaponRange: nullableTrimmedString(80).default(null),
+    weaponProperties: z.string().max(300).default(''),
     notes: z.string().max(1000).default(''),
   })
   .strict();
@@ -184,6 +227,16 @@ export const dnd5e2014SpellEntrySchema = z
     id: z.string().trim().min(1).max(80),
     level: z.number().int().min(0).max(9),
     name: z.string().trim().min(1, 'El nom del conjur és obligatori.').max(140),
+    castingTime: z.string().max(100).default(''),
+    range: z.string().max(100).default(''),
+    components: z.string().max(120).default(''),
+    duration: z.string().max(100).default(''),
+    school: nullableTrimmedString(80).default(null),
+    sourceType: z
+      .enum(['class', 'pact', 'feature', 'race', 'item', 'custom'])
+      .default('class'),
+    sourceClassId: nullableTrimmedString(80).default(null),
+    alwaysPrepared: z.boolean().default(false),
     prepared: z.boolean().default(false),
     inSpellbook: z.boolean().default(false),
     ritual: z.boolean().default(false),
@@ -217,6 +270,42 @@ export const dnd5e2014AsiEntrySchema = z
     notes: z.string().max(1000).default(''),
   })
   .strict();
+
+export const dnd5e2014LevelHistoryEntrySchema = z
+  .object({
+    id: z.string().trim().min(1).max(80),
+    level: z
+      .number()
+      .int()
+      .min(MIN_OFFICIAL_LEVEL_2014)
+      .max(MAX_OFFICIAL_LEVEL_2014),
+    classId: z.enum(CLASS_ID_VALUES),
+    customClassName: nullableTrimmedString(80).default(null),
+    subclassId: nullableTrimmedString(80).default(null),
+    hpGain: z.number().int().min(0).max(50).nullable().default(null),
+    notes: z.string().max(1000).default(''),
+    date: z.string().max(40).default(''),
+  })
+  .strict()
+  .superRefine((entry, ctx) => {
+    if (entry.classId === 'custom' && !entry.customClassName) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['customClassName'],
+        message: 'L’entrada d’historial amb classe personalitzada requereix `customClassName`.',
+      });
+    }
+    if (entry.subclassId) {
+      const subMeta = getSubclassEntry(entry.subclassId);
+      if (subMeta && subMeta.classId !== entry.classId) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ['subclassId'],
+          message: `La subclasse "${subMeta.labelCa}" a l’historial no correspon a la classe "${entry.classId}".`,
+        });
+      }
+    }
+  });
 
 const abilityScoreSchema = z
   .number()
@@ -272,6 +361,8 @@ export const dnd5e2014SheetSchema = z
         alignment: nullableTrimmedString(80),
         faith: nullableTrimmedString(120),
         age: nullableTrimmedString(40),
+        size: nullableTrimmedString(40),
+        senses: nullableTrimmedString(160),
         appearanceNotes: z.string().max(4000),
       })
       .strict(),
@@ -287,6 +378,7 @@ export const dnd5e2014SheetSchema = z
       .object({
         proficient: z.array(z.enum(ABILITY_KEYS)).max(6).transform(dedupeArray),
         overrides: buildFixedKeysNumberMap(ABILITY_KEYS, -20, 40),
+        rollModes: buildFixedKeysRollModeMap(ABILITY_KEYS),
       })
       .strict(),
     skills: z
@@ -295,6 +387,7 @@ export const dnd5e2014SheetSchema = z
         expertise: z.array(z.enum(SKILL_IDS)).max(18).transform(dedupeArray),
         halfProficient: z.boolean(),
         overrides: buildFixedKeysNumberMap(SKILL_IDS, -20, 40),
+        rollModes: buildFixedKeysRollModeMap(SKILL_IDS),
       })
       .strict(),
     proficiencies: z
@@ -343,6 +436,11 @@ export const dnd5e2014SheetSchema = z
       .strict(),
     attacks: z.array(dnd5e2014AttackEntrySchema).max(50),
     inventory: z.array(dnd5e2014InventoryItemSchema).max(300),
+    attunement: z
+      .object({
+        limitOverride: z.number().int().min(0).max(10).nullable(),
+      })
+      .strict(),
     currency: z
       .object({
         cp: z.number().int().min(0).max(100000000),
@@ -378,6 +476,7 @@ export const dnd5e2014SheetSchema = z
         experiencePoints: z.number().int().min(0).max(10000000),
         inspiration: z.boolean(),
         abilityScoreImprovements: z.array(dnd5e2014AsiEntrySchema).max(20),
+        levelHistory: z.array(dnd5e2014LevelHistoryEntrySchema).max(20),
       })
       .strict(),
     background: z
@@ -395,14 +494,132 @@ export const dnd5e2014SheetSchema = z
   })
   .strict()
   .superRefine((sheet, ctx) => {
+    const classSum = sheet.raceAndClass.classes.reduce((sum, c) => sum + c.level, 0);
     if (sheet.raceAndClass.classes.length > 0 && sheet.progression.totalLevel !== null) {
-      const classSum = sheet.raceAndClass.classes.reduce((sum, c) => sum + c.level, 0);
       if (sheet.progression.totalLevel !== classSum) {
         ctx.addIssue({
           code: z.ZodIssueCode.custom,
           path: ['progression', 'totalLevel'],
           message: `El nivell total (${sheet.progression.totalLevel}) no coincideix amb la suma dels nivells de classe (${classSum}).`,
         });
+      }
+    }
+
+    // Attunement consistency
+    const invById = new Map<string, (typeof sheet.inventory)[number]>();
+    let attunedCount = 0;
+    for (let i = 0; i < sheet.inventory.length; i++) {
+      const item = sheet.inventory[i];
+      invById.set(item.id, item);
+      if (item.attuned) {
+        if (!item.requiresAttunement) {
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            path: ['inventory', i, 'attuned'],
+            message: `L’objecte "${item.name}" no es pot sintonitzar perquè no requereix sintonització.`,
+          });
+        }
+        attunedCount += 1;
+      }
+    }
+    const maxAttune = sheet.attunement.limitOverride ?? DEFAULT_ATTUNEMENT_LIMIT_2014;
+    if (attunedCount > maxAttune) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['inventory'],
+        message: `Hi ha ${attunedCount} objectes sintonitzats i el màxim actual és de ${maxAttune}.`,
+      });
+    }
+
+    // Linked attacks consistency (never duplicate or point to missing/non-weapon inventory items)
+    const seenLinkedItems = new Set<string>();
+    for (let i = 0; i < sheet.attacks.length; i++) {
+      const atk = sheet.attacks[i];
+      if (!atk.inventoryItemId) continue;
+      if (seenLinkedItems.has(atk.inventoryItemId)) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ['attacks', i, 'inventoryItemId'],
+          message: 'No es pot enllaçar el mateix objecte d’inventari més d’una vegada dins atacs.',
+        });
+      }
+      seenLinkedItems.add(atk.inventoryItemId);
+      const linkedItem = invById.get(atk.inventoryItemId);
+      if (!linkedItem || linkedItem.category !== 'weapon') {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ['attacks', i, 'inventoryItemId'],
+          message: `L’atac "${atk.name}" referencia una arma inexistent o que no és de categoria arma.`,
+        });
+      }
+    }
+
+    // Level history consistency against character level and classes
+    const effectiveTotalLevel =
+      sheet.raceAndClass.classes.length > 0
+        ? classSum
+        : (sheet.progression.totalLevel ?? 1);
+
+    const classLevelsByKey = new Map<string, { level: number; subclassId: string | null }>();
+    for (const cls of sheet.raceAndClass.classes) {
+      const key = cls.classId === 'custom' ? `custom:${cls.customClassName ?? ''}` : cls.classId;
+      classLevelsByKey.set(key, { level: cls.level, subclassId: cls.subclassId ?? null });
+    }
+
+    const seenHistoryLevels = new Set<number>();
+    const historyCountsByClass = new Map<string, number>();
+
+    for (let i = 0; i < sheet.progression.levelHistory.length; i++) {
+      const entry = sheet.progression.levelHistory[i];
+      if (seenHistoryLevels.has(entry.level)) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ['progression', 'levelHistory', i, 'level'],
+          message: `L’historial de progressió conté entrades duplicades per al nivell ${entry.level}.`,
+        });
+      }
+      seenHistoryLevels.add(entry.level);
+
+      if (entry.level > effectiveTotalLevel) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ['progression', 'levelHistory', i, 'level'],
+          message: `El nivell ${entry.level} de l’historial supera el nivell actual del personatge (${effectiveTotalLevel}).`,
+        });
+      }
+
+      if (sheet.raceAndClass.classes.length > 0) {
+        const key =
+          entry.classId === 'custom' ? `custom:${entry.customClassName ?? ''}` : entry.classId;
+        const currentClassInfo = classLevelsByKey.get(key);
+        if (!currentClassInfo) {
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            path: ['progression', 'levelHistory', i, 'classId'],
+            message: `La classe "${entry.customClassName || entry.classId}" de l’historial no correspon a cap classe activa del personatge.`,
+          });
+        } else {
+          const nextCount = (historyCountsByClass.get(key) ?? 0) + 1;
+          historyCountsByClass.set(key, nextCount);
+          if (nextCount > currentClassInfo.level) {
+            ctx.addIssue({
+              code: z.ZodIssueCode.custom,
+              path: ['progression', 'levelHistory', i, 'classId'],
+              message: `L’historial registra més nivells de "${entry.customClassName || entry.classId}" (${nextCount}) dels que té actualment (${currentClassInfo.level}).`,
+            });
+          }
+          if (
+            currentClassInfo.subclassId &&
+            entry.subclassId &&
+            currentClassInfo.subclassId !== entry.subclassId
+          ) {
+            ctx.addIssue({
+              code: z.ZodIssueCode.custom,
+              path: ['progression', 'levelHistory', i, 'subclassId'],
+              message: `La subclasse "${entry.subclassId}" a l’historial contradiu la subclasse actual "${currentClassInfo.subclassId}".`,
+            });
+          }
+        }
       }
     }
   });
@@ -416,6 +633,8 @@ export const dnd5e2014SheetPatchSchema = z
         alignment: nullableTrimmedString(80).optional(),
         faith: nullableTrimmedString(120).optional(),
         age: nullableTrimmedString(40).optional(),
+        size: nullableTrimmedString(40).optional(),
+        senses: nullableTrimmedString(160).optional(),
         appearanceNotes: z.string().max(4000).optional(),
       })
       .strict()
@@ -433,6 +652,7 @@ export const dnd5e2014SheetPatchSchema = z
       .object({
         proficient: z.array(z.enum(ABILITY_KEYS)).max(6).transform(dedupeArray).optional(),
         overrides: buildFixedKeysNullableNumberMap(ABILITY_KEYS, -20, 40).optional(),
+        rollModes: buildFixedKeysNullableRollModeMap(ABILITY_KEYS).optional(),
       })
       .strict()
       .optional(),
@@ -442,6 +662,7 @@ export const dnd5e2014SheetPatchSchema = z
         expertise: z.array(z.enum(SKILL_IDS)).max(18).transform(dedupeArray).optional(),
         halfProficient: z.boolean().optional(),
         overrides: buildFixedKeysNullableNumberMap(SKILL_IDS, -20, 40).optional(),
+        rollModes: buildFixedKeysNullableRollModeMap(SKILL_IDS).optional(),
       })
       .strict()
       .optional(),
@@ -497,6 +718,12 @@ export const dnd5e2014SheetPatchSchema = z
       .optional(),
     attacks: z.array(dnd5e2014AttackEntrySchema).max(50).optional(),
     inventory: z.array(dnd5e2014InventoryItemSchema).max(300).optional(),
+    attunement: z
+      .object({
+        limitOverride: z.number().int().min(0).max(10).nullable().optional(),
+      })
+      .strict()
+      .optional(),
     currency: z
       .object({
         cp: z.number().int().min(0).max(100000000).optional(),
@@ -535,6 +762,7 @@ export const dnd5e2014SheetPatchSchema = z
         experiencePoints: z.number().int().min(0).max(10000000).optional(),
         inspiration: z.boolean().optional(),
         abilityScoreImprovements: z.array(dnd5e2014AsiEntrySchema).max(20).optional(),
+        levelHistory: z.array(dnd5e2014LevelHistoryEntrySchema).max(20).optional(),
       })
       .strict()
       .optional(),
@@ -617,9 +845,26 @@ function applyNumericMapPatch<TKey extends string>(
   return next;
 }
 
+function applyRollModeMapPatch<TKey extends string>(
+  current: Partial<Record<TKey, RollMode>>,
+  patch: Partial<Record<TKey, RollMode | null>> | undefined
+): Partial<Record<TKey, RollMode>> {
+  const next: Partial<Record<TKey, RollMode>> = { ...current };
+  if (!patch) return next;
+  for (const [key, value] of Object.entries(patch)) {
+    if (value === undefined) continue;
+    if (value === null) {
+      delete next[key as TKey];
+    } else if (value === 'disadvantage' || value === 'normal' || value === 'advantage') {
+      next[key as TKey] = value;
+    }
+  }
+  return next;
+}
+
 /**
  * Pure deep merge of a validated v2 sheet patch into a normalized v2 sheet object.
- * Preserves untouched fields, allows explicit null deletion inside override maps,
+ * Preserves untouched fields, allows explicit null deletion inside override/roll-mode maps,
  * and keeps `progression.totalLevel` aligned with class levels when classes exist.
  */
 export function mergeDnd5e2014SheetPatch(
@@ -655,6 +900,10 @@ export function mergeDnd5e2014SheetPatch(
         next.savingThrows.overrides,
         patch.savingThrows.overrides
       ) as Dnd5e2014SheetData['savingThrows']['overrides'],
+      rollModes: applyRollModeMapPatch(
+        next.savingThrows.rollModes,
+        patch.savingThrows.rollModes as Partial<Record<AbilityKey, RollMode | null>> | undefined
+      ),
     };
   }
   if (patch.skills) {
@@ -666,6 +915,10 @@ export function mergeDnd5e2014SheetPatch(
         next.skills.overrides,
         patch.skills.overrides
       ) as Dnd5e2014SheetData['skills']['overrides'],
+      rollModes: applyRollModeMapPatch(
+        next.skills.rollModes,
+        patch.skills.rollModes as Partial<Record<SkillId, RollMode | null>> | undefined
+      ),
     };
   }
   if (patch.proficiencies) {
@@ -694,6 +947,9 @@ export function mergeDnd5e2014SheetPatch(
   }
   if (patch.inventory !== undefined) {
     next.inventory = patch.inventory.map((i) => ({ ...i }));
+  }
+  if (patch.attunement) {
+    next.attunement = { ...next.attunement, ...patch.attunement };
   }
   if (patch.currency) {
     next.currency = { ...next.currency, ...patch.currency };
@@ -728,6 +984,10 @@ export function mergeDnd5e2014SheetPatch(
       ...patch.progression,
       abilityScoreImprovements:
         patch.progression.abilityScoreImprovements ?? next.progression.abilityScoreImprovements,
+      levelHistory:
+        patch.progression.levelHistory !== undefined
+          ? patch.progression.levelHistory.map((h) => ({ ...h })).sort((a, b) => a.level - b.level)
+          : next.progression.levelHistory,
     };
   }
   if (patch.background) {

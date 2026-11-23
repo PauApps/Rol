@@ -1,6 +1,15 @@
 # Registre de canvis (Changelog)
 
-## [0.3.0-dev] — Fase 3, Increments 1 i 2 (Motor D&D 5e 2014, validació Zod v2, persistència i permisos granulars)
+## [0.3.0-dev] — Fase 3, Increments 1, 2, 3A i 3B (Domini universal D&D 5e 2014 completat)
+
+### Afegit i actualitzat (Increment 3A + 3B)
+- Auditoria de la fitxa HTML de referència de Pim (`docs/references/Fitxa_Interactiva_Pim_Bramble-v5.html`) i definició de la fitxa universal en 5 pestanyes (**Increment 3A**).
+- Ampliació retrocompatible de `Dnd5e2014SheetData`, `createEmptyDnd5e2014Sheet()` i `normalizeDnd5e2014Sheet()` dins `schema.ts`: `generalInfo.size`/`senses`, `savingThrows.rollModes`, `skills.rollModes`, `attacks.inventoryItemId`/`range`, categoria `magic_item`, camps d’arma i sintonització a `inventory`, `attunement.limitOverride`, metadades/origen (`castingTime`, `range`, `components`, `duration`, `school`, `sourceType`, `sourceClassId`, `alwaysPrepared`) a `spells` i `progression.levelHistory`.
+- Nou mòdul pur d’atacs (`src/domain/systems/dnd5e-2014/attacks.ts`) amb `computeAttacks()`, `getAllowedOfficialWeaponAbilities()`, `resolveWeaponProficiency()` i fusió sense duplicats d’armes equipades amb overrides enllaçats d’`attacks[]`.
+- Evolució de `computeSpellcasting()` a `rules.ts` i `catalog.ts` amb models independents per classe (`prepared`, `known`, `spellbook`, `pact`, `none`), càlcul de `preparedLimit` oficial i límit al servidor (`SPELL_PREPARED_LIMIT_EXCEEDED`), distinció separada entre `spellbookCount`, `preparedCount`, `alwaysPreparedCount` i `specialSpellsCount`, fórmula oficial de terç de llançador en classe única (`floor((lvl + 2) / 3)`) i Màgia de Pacte separada.
+- Nou mòdul pur de descansos (`src/domain/systems/dnd5e-2014/rests.ts`) amb `buildShortRestPatch()` i `buildLongRestPatch()` per a daus de cop voluntaris, Màgia de Pacte, recuperació de recursos `short_rest`/`long_rest`/`dawn` opt-in, protecció de recursos manuals `other` i respecte a `fieldPermissions`.
+- Progressió i recursos: ampliació de `computeProgression()` amb fites futures fins al nivell 20 (`upcomingMilestones`, `classProgressions`, `maxLevelMessageCa`), revisió dels recursos oficials de les 12 classes i subclasses (`Natural Recovery`, `Cosmic Omen`, `Portent`) separant `origin: 'official' | 'custom'`, i helper `executeVirtualD20Check()` a `dice.ts` subordinat a `campaign.virtualDiceEnabled`.
+- Seguretat i proves: ampliació de `validation.ts`, `permissions.ts` (`inventory.weaponProficient`, `inventory.weaponAbilityOverride`, `attunement.limitOverride`), `character-service.ts`, actualització documental i creació de `tests/phase3b-domain-extensions.test.ts` i informe `PHASE_3B_DOMAIN_IMPLEMENTATION.md`.
 
 ### Afegit i actualitzat (Increment 2 + revisió Increment 1)
 - **Validació Zod completa v2 (`src/domain/systems/dnd5e-2014/validation.ts`):** esquemes estrictes `.strict()` (`dnd5e2014SheetSchema`, `dnd5e2014SheetPatchSchema`, `createCharacterRequestSchema`, `updateCharacterRequestSchema`) amb fusió segura (`mergeDnd5e2014SheetPatch`) i rebuig de camps desconeguts, valors derivats falsificats o nivells superiors a 20.
