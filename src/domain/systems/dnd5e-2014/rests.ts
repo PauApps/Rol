@@ -353,6 +353,17 @@ export function buildLongRestPatch(
     }
   }
 
+  if (
+    sheet.hitPoints.hitDiceUsedByDie === null &&
+    options?.hitDiceToRecover &&
+    Object.values(options.hitDiceToRecover).some((v) => v !== undefined)
+  ) {
+    throw badRequest(
+      'UNALLOCATED_LEGACY_HIT_DICE',
+      'Aquesta fitxa antiga no té desglossament per mida dels daus gastats; executa el descans llarg sense especificar mides individuals.'
+    );
+  }
+
   const spentDice = hitDicePool.used;
   if (spentDice > 0) {
     const allowance = Math.max(1, Math.floor(totalLevel / 2));
@@ -441,16 +452,6 @@ export function buildLongRestPatch(
       }
     } else {
       // Legacy unallocated multiclass usage: recover at most official allowance = max(1, floor(totalLevel / 2))
-      if (
-        options?.hitDiceToRecover &&
-        Object.values(options.hitDiceToRecover).some((v) => v !== undefined)
-      ) {
-        throw badRequest(
-          'UNALLOCATED_LEGACY_HIT_DICE',
-          'Aquesta fitxa antiga no té desglossament per mida dels daus gastats; executa el descans llarg sense especificar mides individuals.'
-        );
-      }
-
       if (isAllowed('hitPoints.hitDiceUsed', options)) {
         hitDiceRecovered = maxRecoverable;
         newHitDiceUsed = Math.max(0, spentDice - hitDiceRecovered);

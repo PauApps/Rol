@@ -1380,6 +1380,41 @@ describe('Fase 3B: Extensions del model de dades, atacs, màgia, descansos, prog
       expect(lv10Used7.summary.hitDiceRecovered).toBe(5);
       expect(lv10Used7.patch.hitPoints).toMatchObject({ hitDiceUsed: 2, hitDiceUsedByDie: null });
 
+      // Validació de hitDiceToRecover quan hitDiceUsedByDie === null fins i tot amb hitDiceUsed === 0
+      for (const hitDiceToRecover of [{ d10: 1 }, { d10: 0 }] as const) {
+        let zeroUsedErr: unknown;
+        try {
+          buildLongRestPatch(makeLegacyMultiSheet(3, 2, 0), { hitDiceToRecover });
+        } catch (err) {
+          zeroUsedErr = err;
+        }
+        expect(zeroUsedErr).toMatchObject({ status: 400, code: 'UNALLOCATED_LEGACY_HIT_DICE' });
+      }
+
+      // Amb hitDiceUsed === 0 i distribució null, `{}` o propietats `undefined` o sense opcions no provoquen error i inicialitzen `{}`
+      for (const opts of [
+        { hitDiceToRecover: {} },
+        { hitDiceToRecover: { d10: undefined } },
+        undefined,
+      ] as const) {
+        const resZeroLegacy = buildLongRestPatch(makeLegacyMultiSheet(3, 2, 0), opts);
+        expect(resZeroLegacy.summary.hitDiceRecovered).toBe(0);
+        expect(resZeroLegacy.patch.hitPoints?.hitDiceUsedByDie).toEqual({});
+      }
+
+      // Amb distribució coneguda (`hitDiceUsedByDie !== null`), la recuperació explícita per mida continua funcionant
+      const knownMultiSheet = makeLegacyMultiSheet(3, 2, 3);
+      knownMultiSheet.hitPoints.hitDiceUsedByDie = { d10: 2, d6: 1 };
+      const resKnownRecover = buildLongRestPatch(knownMultiSheet, {
+        hitDiceToRecover: { d10: 1, d6: 1 },
+      });
+      expect(resKnownRecover.summary.hitDiceRecovered).toBe(2);
+      expect(resKnownRecover.summary.hitDiceRecoveredByDie).toEqual({ d10: 1, d6: 1 });
+      expect(resKnownRecover.patch.hitPoints).toMatchObject({
+        hitDiceUsed: 1,
+        hitDiceUsedByDie: { d10: 1, d6: 0 },
+      });
+
       // Permisos granulars sobre `hitPoints.hitDiceUsed` i `hitPoints.hitDiceUsedByDie`
       const blockedScalarPerms = normalizeFieldPermissions({
         gmOnlyFields: ['hitPoints.hitDiceUsed', 'hitPoints.hitDiceUsedByDie'],
