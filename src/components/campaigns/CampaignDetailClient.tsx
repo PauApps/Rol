@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, type FormEvent } from 'react';
+import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import {
   Activity,
@@ -9,6 +10,7 @@ import {
   Link2,
   Plus,
   ShieldBan,
+  SlidersHorizontal,
   Trash2,
   UserCheck,
   UserPlus,
@@ -672,8 +674,8 @@ export function CampaignDetailClient({
       <div className="grid gap-6 lg:grid-cols-2">
         <Card
           title="Personatges de la campanya"
-          subtitle="Tots els membres poden consultar les fitxes base del grup; només el propietari autoritzat o el GM les poden editar."
-          actions={<Badge tone="neutral">Fitxa D&D 5e completa a Fase 3</Badge>}
+          subtitle="Tots els membres poden consultar les fitxes del grup; només el propietari autoritzat o el GM les poden editar."
+          actions={<Badge tone="gold">Fitxa D&D 5e (3C.1)</Badge>}
         >
           <form onSubmit={handleCreateCharacter} className="mb-4 flex flex-col gap-2.5 sm:flex-row sm:items-end">
             <div className="flex-1">
@@ -734,7 +736,12 @@ export function CampaignDetailClient({
                 >
                   <div className="min-w-0">
                     <div className="flex flex-wrap items-center gap-2">
-                      <span className="font-semibold text-[var(--rol-ink-primary)]">{ch.name}</span>
+                      <Link
+                        href={`/campaigns/${campaign.id}/characters/${ch.id}`}
+                        className="font-semibold text-[var(--rol-ink-primary)] hover:text-[var(--rol-accent-primary)] hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--rol-accent-gold)]"
+                      >
+                        {ch.name}
+                      </Link>
                       {ch.isMine && <Badge tone="gold">El teu</Badge>}
                       {!canManage && !ch.canEdit && <Badge tone="neutral">Només lectura</Badge>}
                     </div>
@@ -742,15 +749,26 @@ export function CampaignDetailClient({
                       {ch.ownerDisplayName ? `Jugador: ${ch.ownerDisplayName}` : 'Personatge del GM'}
                     </p>
                   </div>
-                  <Button
-                    size="sm"
-                    variant="secondary"
-                    disabled={charModalLoading}
-                    onClick={() => handleInspectCharacter(ch.id)}
-                  >
-                    <Eye className="h-3.5 w-3.5" />
-                    {ch.canEdit ? 'Consultar / Editar' : 'Consultar'}
-                  </Button>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <Link
+                      href={`/campaigns/${campaign.id}/characters/${ch.id}`}
+                      className="inline-flex items-center justify-center gap-1.5 rounded-[var(--rol-radius-md)] bg-[var(--rol-accent-primary)] px-3 py-1.5 text-xs font-medium text-[var(--rol-accent-primary-ink)] shadow-sm transition-colors hover:bg-[var(--rol-accent-primary-hover)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--rol-accent-gold)]"
+                    >
+                      <Eye className="h-3.5 w-3.5" />
+                      {ch.canEdit ? 'Obrir fitxa' : 'Consultar fitxa'}
+                    </Link>
+                    {(canManage || ch.canEdit) && (
+                      <Button
+                        size="sm"
+                        variant="secondary"
+                        disabled={charModalLoading}
+                        onClick={() => handleInspectCharacter(ch.id)}
+                      >
+                        <SlidersHorizontal className="h-3.5 w-3.5" />
+                        {canManage ? 'Gestió GM' : 'Edició ràpida'}
+                      </Button>
+                    )}
+                  </div>
                 </li>
               ))}
             </ul>

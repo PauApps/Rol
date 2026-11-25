@@ -75,3 +75,17 @@
   font-family: var(--rol-font-display);
   letter-spacing: 0.01em;
 }
+
+.rol-sheet-banner {
+  background: linear-gradient(180deg, var(--rol-bg-surface) 0%, var(--rol-bg-surface-alt) 100%);
+  border: 1px solid var(--rol-border-strong);
+  border-top: 3px solid var(--rol-accent-primary);
+  box-shadow: var(--rol-shadow-card);
+  border-radius: var(--rol-radius-lg);
+}
+
+.rol-stat-plaque {
+  background-color: var(--rol-bg-surface);
+  border: 1px solid var(--rol-border-strong);
+  border-radius: var(--rol-radius-md);
+}

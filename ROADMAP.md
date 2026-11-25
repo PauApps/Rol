@@ -19,13 +19,17 @@ Basat en la metodologia incremental de [DOCUMENT_MESTRE.md](./DOCUMENT_MESTRE.md
 - Límit de personatges per jugador dins cada campanya validat transaccionalment al servidor.
 - Flux segur perquè un convidat pugui vincular el seu accés i personatges a un compte registrat nou o existent sense duplicar membres ni personatges.
 
-## Fase 3 — Personatges i fitxes D&D 5e (2014) *(En curs — Increments 1, 2, 3A i 3B completats; 3C pendent)*
+## Fase 3 — Personatges i fitxes D&D 5e (2014) *(En curs — Increments 1, 2, 3A, 3B i 3C.1 completats; 3C.2–3C.4 pendents)*
 
 - **Increment 1 *(Completat)*:** Model universal `v2` D&D 5e (2014), motor de regles pur (nivells 1–20 oficials, crítics exclusius d’atac, recursos modulars, tirades `d20`) i configuració `virtualDiceEnabled` controlada pel GM (`false` per defecte).
 - **Increment 2 *(Completat)*:** Validació completa **Zod** (`dnd5e2014SheetSchema` i `dnd5e2014SheetPatchSchema`), compatibilitat retroactiva `v1 → v2` a `character-service.ts`, permisos granulars per secció/camp, protecció dels càlculs oficials davant jugadors, aplicació al servidor de `creationConfig` i proves de persistència/migracions.
 - **Increment 3A *(Completat)*:** Auditoria funcional i visual de `docs/references/Fitxa_Interactiva_Pim_Bramble-v5.html` i definició de l’arquitectura de les 5 pestanyes de la fitxa universal D&D 5e (2014).
 - **Increment 3B *(Completat + revisió correctiva aplicada)*:** Ampliació del model `v2` JSONB (`size`, `senses`, `rollModes`, `hitDiceUsedByDie`, `magic_item`, sintonització, propietats d’arma, `weaponAbilityOverride`, `attacks.kind`/`spellSourceClassId`/overrides, `spellcasting.sourceOverrides`, metadades de conjurs i `levelHistory`), motor pur d’atacs (`attacks.ts`) amb diferenciació estricta de tipus i bloqueig d’atacs no oficials, màgia per classe i multiclasse (`prepared`/`known`/`spellbook`/`pact`/`none`), descansos (`rests.ts`) per mida de dau (`d6`/`d8`/`d10`/`d12`), fites de progressió fins al nivell 20, recursos de les 12 classes i protecció de nous camins oficials i límit de preparats.
-- **Increment 3C *(Pendent — proper pas)*:** Implementació de la interfície completa de les 5 pestanyes React, capçalera responsive, fluxos d’inventari/conjurs/descansos, camps personalitzats i còpia selectiva de configuració entre campanyes.
+- **Increment 3C.1 *(Completat)*:** Ruta dedicada `/campaigns/[id]/characters/[characterId]`, capçalera persistent responsive alimentada exclusivament des de `computed`, navegació accessible per les 5 pestanyes, primera pestanya «Característiques i combat» funcional (6 característiques, 6 salvacions, 18 habilitats oficials, combat/vitalitat, daus de cop per mida amb protecció de fitxes antigues i atacs amb separació per `kind`), selectors de mode de tirada (`rollModes`), modal de gestió GM i integració amb `CampaignDetailClient.tsx`.
+- **Increments 3C.2–3C.4 *(Pendents)*:**
+  - **3C.2:** Pestanyes «Màgia i habilitats» i «Equipament i inventari».
+  - **3C.3:** Pestanyes «Història i diari» i «Progressió i evolució».
+  - **3C.4:** Endpoints i fluxos interactius de descansos curt/llarg, dau virtual amb historial de tirades, camps personalitzats i còpia selectiva de configuració entre campanyes.
 
 ## Fase 4 — Historial, auditories de fitxa i biblioteca de manuals
 
