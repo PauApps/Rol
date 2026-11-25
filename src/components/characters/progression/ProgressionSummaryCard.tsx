@@ -2,7 +2,11 @@
 
 import { useState } from 'react';
 import { ArrowUpCircle, Award, Lock, Sparkles, TrendingUp } from 'lucide-react';
-import { XP_THRESHOLDS_2014 } from '@/domain/systems/dnd5e-2014';
+import {
+  XP_THRESHOLDS_2014,
+  evaluateLevelUpEligibility,
+  normalizeDnd5e2014Sheet,
+} from '@/domain/systems/dnd5e-2014';
 import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
@@ -36,6 +40,10 @@ export function ProgressionSummaryCard({
 
   const [xpToAdd, setXpToAdd] = useState('');
 
+  // Server-authoritative level-up check (never uses unsaved draft XP)
+  const serverNormalized = normalizeDnd5e2014Sheet(character.sheetData, character.name);
+  const levelUpEligibility = evaluateLevelUpEligibility(serverNormalized);
+
   // Progress bar uses draft XP with server XP_THRESHOLDS_2014 bounds without duplicating XP math
   const draftXp = Math.max(0, Math.floor(draft.progression.experiencePoints ?? 0));
   const minXp = prog.currentLevelMinXp ?? XP_THRESHOLDS_2014[prog.totalLevel - 1] ?? 0;
@@ -45,7 +53,7 @@ export function ProgressionSummaryCard({
     !prog.isMaxLevel && nextXp !== null && nextXp > minXp
       ? Math.min(100, Math.max(0, Math.round(((draftXp - minXp) / (nextXp - minXp)) * 100)))
       : 100;
-  const readyToLevelUp = !prog.isMaxLevel && nextXp !== null && draftXp >= nextXp;
+  const canClickLevelUp = canLevelUpPermission && !hasUnsavedChanges && levelUpEligibility.allowed;
 
   function handleAddXp() {
     if (!canEditXp) return;
@@ -62,15 +70,19 @@ export function ProgressionSummaryCard({
   return (
     <Card
       title="Nivell, experiència i inspiració"
-      subtitle="Seguiment oficial de nivell (1–20), punts d’experiència i progrés cap al nivell següent."
+      subtitle="Seguiment oficial de nivell (1–20), punts d’experiència acumulats i progrés cap al nivell següent."
       actions={
         <div className="flex flex-wrap items-center gap-2">
-          {readyToLevelUp && <Badge tone="success">PE suficients per pujar de nivell!</Badge>}
+          {levelUpEligibility.allowed && !hasUnsavedChanges && (
+            <Badge tone="success">
+              PE suficients per pujar al nivell {levelUpEligibility.nextLevel}!
+            </Badge>
+          )}
           {canLevelUpPermission && !prog.isMaxLevel && (
             <Button
               type="button"
               size="sm"
-              disabled={hasUnsavedChanges}
+              disabled={!canClickLevelUp}
               onClick={onOpenLevelUp}
             >
               <ArrowUpCircle className="h-3.5 w-3.5" />
@@ -230,6 +242,16 @@ export function ProgressionSummaryCard({
             Tens canvis sense desar a la fitxa. Desa o descarta els canvis pendents abans d’obrir l’assistent de pujada de nivell.
           </p>
         )}
+
+        {!hasUnsavedChanges &&
+          canLevelUpPermission &&
+          !prog.isMaxLevel &&
+          !levelUpEligibility.allowed &&
+          levelUpEligibility.reason && (
+            <p className="rounded-[var(--rol-radius-sm)] border border-[var(--rol-border-subtle)] bg-[var(--rol-bg-surface-alt)]/50 px-3 py-2 text-xs text-[var(--rol-ink-secondary)]">
+              {levelUpEligibility.reason}
+            </p>
+          )}
 
         {!canLevelUpPermission && !prog.isMaxLevel && (
           <div className="flex items-center gap-2 rounded-[var(--rol-radius-md)] border border-[var(--rol-border-subtle)] bg-[var(--rol-bg-surface-alt)]/50 px-3 py-2 text-xs text-[var(--rol-ink-muted)]">

@@ -122,6 +122,24 @@ export function CharacterSheetClient({
     router.refresh();
   }
 
+  async function handleSyncFromServer() {
+    try {
+      const response = await fetch(`/api/campaigns/${campaign.id}/characters/${character.id}`, {
+        cache: 'no-store',
+      });
+      if (!response.ok) return;
+      const data = await response.json();
+      if (data?.character) {
+        const synced = data.character as CharacterSheetRecord;
+        setCharacter(synced);
+        setDraft(createDraftFromCharacter(synced));
+        router.refresh();
+      }
+    } catch {
+      // Mantenim l'estat actual si falla la refresca de xarxa
+    }
+  }
+
   return (
     <div className="space-y-5 pb-10">
       {/* Navegació de retorn a la campanya */}
@@ -273,6 +291,7 @@ export function CharacterSheetClient({
             );
             router.refresh();
           }}
+          onSyncFromServer={handleSyncFromServer}
         />
       )}
 

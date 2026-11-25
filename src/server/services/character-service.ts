@@ -2,14 +2,16 @@ import { and, desc, eq, sql } from 'drizzle-orm';
 import { campaignMembers, characters } from '@/db/schema';
 import type { AppDatabase } from '@/db/types';
 import { normalizeCampaignCreationConfig } from '@/domain/campaigns/creation-config';
-import { badRequest, forbidden, notFound } from '@/domain/errors';
+import { badRequest, conflict, forbidden, notFound } from '@/domain/errors';
 import {
   DEFAULT_PLAYER_EDITABLE_FIELDS,
   PROTECTED_OFFICIAL_CALCULATION_PATHS,
   buildEmptySheetFromPatch,
+  calculateTotalLevel,
   computeDnd5e2014Sheet,
   dnd5e2014SheetPatchSchema,
   dnd5e2014SheetSchema,
+  evaluateLevelUpEligibility,
   evaluatePlayerFieldAccess,
   extractProtectedPathsFromCreationPatch,
   extractTouchedPathsFromSheetPatch,
@@ -62,6 +64,8 @@ export interface UpdateCharacterBaseInput {
   gmNotes?: string;
   fieldPermissions?: CharacterFieldPermissions;
   memberId?: string | null;
+  expectedCurrentLevel?: number;
+  expectedUpdatedAt?: string;
 }
 
 function cloneJsonObject<T extends Record<string, unknown>>(obj: T): T {
@@ -530,24 +534,10 @@ export async function updateCharacterBase(
 ) {
   const access = await assertCampaignAccess(db, ctx, campaignId);
 
-  const [existing] = await db
-    .select()
-    .from(characters)
-    .where(and(eq(characters.id, characterId), eq(characters.campaignId, access.campaign.id)))
-    .limit(1);
-
-  if (!existing) {
-    throw notFound('CHARACTER_NOT_FOUND', 'Personatge no trobat dins d’aquesta campanya.');
-  }
-
   const systemDef = getGameSystem(access.campaign.systemId);
   if (!systemDef) {
     throw badRequest('SYSTEM_NOT_REGISTERED', 'Sistema de rol no registrat al domini.');
   }
-
-  const isGm = access.accessRole === 'gm';
-  const perms = normalizeFieldPermissions(existing.fieldPermissions);
-  const existingNormalized = normalizeDnd5e2014Sheet(existing.sheetData, existing.name);
 
   let parsedSheetPatch: Dnd5e2014SheetPatchOutput | undefined;
   if (patch.sheetPatch !== undefined) {
@@ -573,258 +563,352 @@ export async function updateCharacterBase(
     );
   }
 
-  const sheetPatchTouched = parsedSheetPatch
-    ? extractTouchedPathsFromSheetPatch(parsedSheetPatch, existingNormalized, perms)
-    : [];
+  const isGm = access.accessRole === 'gm';
+  const creationConfig = normalizeCampaignCreationConfig(access.campaign.creationConfig);
 
-  if (!isGm) {
-    if (existing.memberId !== access.member!.id) {
-      throw forbidden(
-        'CHARACTER_EDIT_FORBIDDEN',
-        'Només pots modificar el teu propi personatge.'
+  const txResult = await db.transaction(async (tx) => {
+    const [existing] = await tx
+      .select()
+      .from(characters)
+      .where(and(eq(characters.id, characterId), eq(characters.campaignId, access.campaign.id)))
+      .for('update')
+      .limit(1);
+
+    if (!existing) {
+      throw notFound('CHARACTER_NOT_FOUND', 'Personatge no trobat dins d’aquesta campanya.');
+    }
+
+    const perms = normalizeFieldPermissions(existing.fieldPermissions);
+    const existingNormalized = normalizeDnd5e2014Sheet(existing.sheetData, existing.name);
+    const currentTotalLevel = calculateTotalLevel(existingNormalized);
+
+    if (
+      patch.expectedUpdatedAt !== undefined &&
+      existing.updatedAt.toISOString() !== patch.expectedUpdatedAt
+    ) {
+      throw conflict(
+        'STALE_LEVEL_UP_STATE',
+        'Les dades del personatge han canviat des de l’última càrrega. Recarrega la fitxa abans de continuar.'
       );
     }
 
     if (
-      patch.gmNotes !== undefined ||
-      patch.fieldPermissions !== undefined ||
-      patch.memberId !== undefined
+      patch.expectedCurrentLevel !== undefined &&
+      patch.expectedCurrentLevel !== currentTotalLevel
     ) {
-      throw forbidden(
-        'GM_ONLY_FIELD_FORBIDDEN',
-        'Només el Director de Joc pot modificar les notes privades, permisos o titularitat.'
+      throw conflict(
+        'STALE_LEVEL_UP_STATE',
+        `L’estat del personatge ha canviat (nivell actual ${currentTotalLevel}, esperat ${patch.expectedCurrentLevel}). Recarrega la fitxa abans de continuar.`
       );
     }
 
-    if (patch.name !== undefined) {
-      const nameDecision = evaluatePlayerFieldAccess('name', perms);
-      if (!nameDecision.allowed) {
+    const sheetPatchTouched = parsedSheetPatch
+      ? extractTouchedPathsFromSheetPatch(parsedSheetPatch, existingNormalized, perms)
+      : [];
+
+    if (!isGm) {
+      if (existing.memberId !== access.member!.id) {
         throw forbidden(
-          'FIELD_EDIT_NOT_AUTHORIZED',
-          'El Director de Joc no autoritza modificar el nom del personatge.'
+          'CHARACTER_EDIT_FORBIDDEN',
+          'Només pots modificar el teu propi personatge.'
         );
+      }
+
+      if (
+        patch.gmNotes !== undefined ||
+        patch.fieldPermissions !== undefined ||
+        patch.memberId !== undefined
+      ) {
+        throw forbidden(
+          'GM_ONLY_FIELD_FORBIDDEN',
+          'Només el Director de Joc pot modificar les notes privades, permisos o titularitat.'
+        );
+      }
+
+      if (patch.name !== undefined) {
+        const nameDecision = evaluatePlayerFieldAccess('name', perms);
+        if (!nameDecision.allowed) {
+          throw forbidden(
+            'FIELD_EDIT_NOT_AUTHORIZED',
+            'El Director de Joc no autoritza modificar el nom del personatge.'
+          );
+        }
+      }
+
+      if (patch.sheetFields) {
+        for (const [fieldPath, value] of Object.entries(patch.sheetFields)) {
+          if (value === undefined) continue;
+          const decision = evaluatePlayerFieldAccess(fieldPath, perms);
+          if (!decision.allowed) {
+            throw forbidden(
+              decision.reason === 'OFFICIAL_CALCULATION_PROTECTED'
+                ? 'OFFICIAL_CALCULATION_PROTECTED'
+                : 'FIELD_EDIT_NOT_AUTHORIZED',
+              `No tens permís del GM per modificar el camp "${fieldPath}".`
+            );
+          }
+        }
+      }
+
+      for (const touchedPath of sheetPatchTouched) {
+        const decision = evaluatePlayerFieldAccess(touchedPath, perms);
+        if (!decision.allowed) {
+          if (decision.reason === 'OFFICIAL_CALCULATION_PROTECTED') {
+            throw forbidden(
+              'OFFICIAL_CALCULATION_PROTECTED',
+              `El camp "${touchedPath}" protegeix càlculs oficials de D&D 5e (2014) i requereix autorització explícita del GM.`
+            );
+          }
+          throw forbidden(
+            'FIELD_EDIT_NOT_AUTHORIZED',
+            `No tens permís del GM per modificar el camp "${touchedPath}".`
+          );
+        }
+      }
+
+      if (patch.customFields) {
+        for (const customKey of Object.keys(patch.customFields)) {
+          const cleanKey = customKey.trim();
+          if (!cleanKey) continue;
+          const decision = evaluatePlayerFieldAccess(`customFields.${cleanKey}`, perms);
+          if (!decision.allowed) {
+            throw forbidden(
+              'FIELD_EDIT_NOT_AUTHORIZED',
+              `No tens permís del GM per modificar el camp personalitzat "${cleanKey}".`
+            );
+          }
+        }
+      }
+    }
+
+    const changedFields: string[] = [];
+    let nextName = existing.name;
+    let nextSheetData: Dnd5e2014SheetData = existingNormalized;
+    const nextCustomFields = cloneJsonObject(existing.customFields);
+    let nextGmNotes = existing.gmNotes;
+    let nextFieldPermissions: NormalizedCharacterFieldPermissions = perms;
+    let nextMemberId = existing.memberId;
+
+    if (parsedSheetPatch) {
+      nextSheetData = mergeDnd5e2014SheetPatch(nextSheetData, parsedSheetPatch);
+      if (parsedSheetPatch.generalInfo?.name !== undefined) {
+        nextName = parsedSheetPatch.generalInfo.name;
+      }
+      changedFields.push(...sheetPatchTouched);
+    }
+
+    if (patch.name !== undefined) {
+      const trimmed = patch.name.trim();
+      if (trimmed.length < 1 || trimmed.length > 100) {
+        throw badRequest(
+          'INVALID_CHARACTER_NAME',
+          'El nom del personatge no pot quedar buit (màxim 100 caràcters).'
+        );
+      }
+      nextName = trimmed;
+      nextSheetData.generalInfo.name = nextName;
+      if (!changedFields.includes('name')) {
+        changedFields.push('name');
       }
     }
 
     if (patch.sheetFields) {
-      for (const [fieldPath, value] of Object.entries(patch.sheetFields)) {
-        if (value === undefined) continue;
-        const decision = evaluatePlayerFieldAccess(fieldPath, perms);
-        if (!decision.allowed) {
-          throw forbidden(
-            decision.reason === 'OFFICIAL_CALCULATION_PROTECTED'
-              ? 'OFFICIAL_CALCULATION_PROTECTED'
-              : 'FIELD_EDIT_NOT_AUTHORIZED',
-            `No tens permís del GM per modificar el camp "${fieldPath}".`
-          );
-        }
+      if (patch.sheetFields['generalInfo.appearanceNotes'] !== undefined) {
+        nextSheetData.generalInfo.appearanceNotes =
+          patch.sheetFields['generalInfo.appearanceNotes'].trim();
+        changedFields.push('generalInfo.appearanceNotes');
+      }
+      if (patch.sheetFields['background.backstory'] !== undefined) {
+        nextSheetData.background.backstory = patch.sheetFields['background.backstory'].trim();
+        changedFields.push('background.backstory');
       }
     }
 
-    for (const touchedPath of sheetPatchTouched) {
-      const decision = evaluatePlayerFieldAccess(touchedPath, perms);
-      if (!decision.allowed) {
-        if (decision.reason === 'OFFICIAL_CALCULATION_PROTECTED') {
-          throw forbidden(
-            'OFFICIAL_CALCULATION_PROTECTED',
-            `El camp "${touchedPath}" protegeix càlculs oficials de D&D 5e (2014) i requereix autorització explícita del GM.`
-          );
-        }
-        throw forbidden(
-          'FIELD_EDIT_NOT_AUTHORIZED',
-          `No tens permís del GM per modificar el camp "${touchedPath}".`
+    const sheetCheck = dnd5e2014SheetSchema.safeParse(nextSheetData);
+    if (!sheetCheck.success) {
+      throw badRequest(
+        'INVALID_CHARACTER_SHEET',
+        sheetCheck.error.issues[0]?.message ?? 'La fitxa resultant no compleix l’esquema v2.',
+        sheetCheck.error.issues
+      );
+    }
+    const validatedSheet = sheetCheck.data as Dnd5e2014SheetData;
+
+    const nextTotalLevel = calculateTotalLevel(validatedSheet);
+    if (nextTotalLevel > currentTotalLevel) {
+      if (
+        parsedSheetPatch?.progression?.experiencePoints !== undefined &&
+        parsedSheetPatch.progression.experiencePoints !==
+          existingNormalized.progression.experiencePoints
+      ) {
+        throw badRequest(
+          'LEVEL_UP_XP_MUTATION_FORBIDDEN',
+          'Els punts d’experiència no es poden modificar ni consumir dins la mateixa operació de pujada de nivell.'
         );
       }
+
+      const levelEligibility = evaluateLevelUpEligibility(existingNormalized, {
+        targetLevel: nextTotalLevel,
+        expectedCurrentLevel: patch.expectedCurrentLevel,
+      });
+      if (!levelEligibility.allowed) {
+        if (levelEligibility.code === 'STALE_LEVEL_UP_STATE') {
+          throw conflict(levelEligibility.code, levelEligibility.reason!);
+        }
+        throw badRequest(
+          levelEligibility.code ?? 'LEVEL_UP_NOT_ALLOWED',
+          levelEligibility.reason!,
+          {
+            currentLevel: levelEligibility.currentLevel,
+            currentXp: levelEligibility.currentXp,
+            requiredXpForNextLevel: levelEligibility.requiredXpForNextLevel,
+            xpMissing: levelEligibility.xpMissing,
+          }
+        );
+      }
+    }
+
+    const allTouchedForCreation = [
+      ...(patch.name !== undefined ? ['name'] : []),
+      ...(patch.sheetFields ? Object.keys(patch.sheetFields) : []),
+      ...sheetPatchTouched,
+    ];
+    const creationValidation = validateCharacterAgainstCampaignConfig(
+      validatedSheet,
+      creationConfig,
+      {
+        isGm,
+        isCreation: false,
+        touchedPaths: allTouchedForCreation,
+      }
+    );
+    if (!creationValidation.valid) {
+      throw badRequest(
+        'CREATION_RESTRICTION_VIOLATION',
+        creationValidation.violations[0] ?? 'Els canvis incompleixen les regles de la campanya.',
+        { violations: creationValidation.violations }
+      );
+    }
+    const extraWarnings: string[] = [...creationValidation.warnings];
+    if (
+      parsedSheetPatch?.raceAndClass?.classes !== undefined &&
+      validatedSheet.raceAndClass.classes.length >= 2
+    ) {
+      const mcCheck = validateMulticlassPrerequisites(
+        validatedSheet.raceAndClass.classes,
+        validatedSheet.abilities
+      );
+      if (!mcCheck.eligible) {
+        if (!isGm) {
+          throw badRequest(
+            'MULTICLASS_PREREQUISITES_NOT_MET',
+            mcCheck.unmetRequirements[0] ??
+              'No compleixes els requisits oficials de multiclasse de D&D 5e (2014).',
+            { unmetRequirements: mcCheck.unmetRequirements }
+          );
+        }
+        extraWarnings.push(...mcCheck.unmetRequirements);
+      }
+    }
+    if (parsedSheetPatch?.spells !== undefined) {
+      assertPlayerPreparedSpellLimits(validatedSheet, isGm);
     }
 
     if (patch.customFields) {
-      for (const customKey of Object.keys(patch.customFields)) {
-        const cleanKey = customKey.trim();
+      for (const [key, value] of Object.entries(patch.customFields)) {
+        const cleanKey = key.trim();
         if (!cleanKey) continue;
-        const decision = evaluatePlayerFieldAccess(`customFields.${cleanKey}`, perms);
-        if (!decision.allowed) {
-          throw forbidden(
-            'FIELD_EDIT_NOT_AUTHORIZED',
-            `No tens permís del GM per modificar el camp personalitzat "${cleanKey}".`
-          );
+        if (value === null || value === undefined) {
+          delete nextCustomFields[cleanKey];
+        } else {
+          nextCustomFields[cleanKey] = value;
         }
+        changedFields.push(`customFields.${cleanKey}`);
       }
     }
-  }
 
-  const changedFields: string[] = [];
-  let nextName = existing.name;
-  let nextSheetData: Dnd5e2014SheetData = existingNormalized;
-  const nextCustomFields = cloneJsonObject(existing.customFields);
-  let nextGmNotes = existing.gmNotes;
-  let nextFieldPermissions: NormalizedCharacterFieldPermissions = perms;
-  let nextMemberId = existing.memberId;
+    if (isGm) {
+      if (patch.gmNotes !== undefined) {
+        nextGmNotes = patch.gmNotes;
+        changedFields.push('gmNotes');
+      }
+      if (patch.fieldPermissions !== undefined) {
+        nextFieldPermissions = normalizeFieldPermissions({
+          playerEditableFields:
+            patch.fieldPermissions.playerEditableFields !== undefined
+              ? patch.fieldPermissions.playerEditableFields
+              : perms.playerEditableFields,
+          gmOnlyFields:
+            patch.fieldPermissions.gmOnlyFields !== undefined
+              ? patch.fieldPermissions.gmOnlyFields
+              : perms.gmOnlyFields,
+          authorizedOverrideFields:
+            patch.fieldPermissions.authorizedOverrideFields !== undefined
+              ? patch.fieldPermissions.authorizedOverrideFields
+              : perms.authorizedOverrideFields,
+        });
+        changedFields.push('fieldPermissions');
+      }
+      if (patch.memberId !== undefined) {
+        if (patch.memberId === null) {
+          nextMemberId = null;
+        } else {
+          const [member] = await tx
+            .select({ id: campaignMembers.id })
+            .from(campaignMembers)
+            .where(
+              and(
+                eq(campaignMembers.id, patch.memberId),
+                eq(campaignMembers.campaignId, access.campaign.id),
+                eq(campaignMembers.status, 'active')
+              )
+            )
+            .limit(1);
 
-  if (parsedSheetPatch) {
-    nextSheetData = mergeDnd5e2014SheetPatch(nextSheetData, parsedSheetPatch);
-    if (parsedSheetPatch.generalInfo?.name !== undefined) {
-      nextName = parsedSheetPatch.generalInfo.name;
+          if (!member) {
+            throw badRequest('INVALID_MEMBER', 'El jugador indicat no pertany a aquesta campanya.');
+          }
+          nextMemberId = member.id;
+        }
+        changedFields.push('memberId');
+      }
     }
-    changedFields.push(...sheetPatchTouched);
-  }
 
-  if (patch.name !== undefined) {
-    const trimmed = patch.name.trim();
-    if (trimmed.length < 1 || trimmed.length > 100) {
-      throw badRequest(
-        'INVALID_CHARACTER_NAME',
-        'El nom del personatge no pot quedar buit (màxim 100 caràcters).'
+    const nextUpdatedAt = new Date(Math.max(Date.now(), existing.updatedAt.getTime() + 1));
+    const updatedRows = await tx
+      .update(characters)
+      .set({
+        name: nextName,
+        schemaVersion: systemDef.schemaVersion,
+        sheetData: validatedSheet,
+        customFields: nextCustomFields,
+        gmNotes: nextGmNotes,
+        fieldPermissions: nextFieldPermissions,
+        memberId: nextMemberId,
+        updatedAt: nextUpdatedAt,
+      })
+      .where(
+        and(
+          eq(characters.id, existing.id),
+          eq(characters.campaignId, access.campaign.id),
+          eq(characters.updatedAt, existing.updatedAt)
+        )
+      )
+      .returning({ id: characters.id });
+
+    if (updatedRows.length === 0) {
+      throw conflict(
+        'STALE_LEVEL_UP_STATE',
+        'S’ha detectat una actualització concurrent sobre aquest personatge. Recarrega la fitxa abans de continuar.'
       );
     }
-    nextName = trimmed;
-    nextSheetData.generalInfo.name = nextName;
-    if (!changedFields.includes('name')) {
-      changedFields.push('name');
-    }
-  }
 
-  if (patch.sheetFields) {
-    if (patch.sheetFields['generalInfo.appearanceNotes'] !== undefined) {
-      nextSheetData.generalInfo.appearanceNotes =
-        patch.sheetFields['generalInfo.appearanceNotes'].trim();
-      changedFields.push('generalInfo.appearanceNotes');
-    }
-    if (patch.sheetFields['background.backstory'] !== undefined) {
-      nextSheetData.background.backstory = patch.sheetFields['background.backstory'].trim();
-      changedFields.push('background.backstory');
-    }
-  }
-
-  const sheetCheck = dnd5e2014SheetSchema.safeParse(nextSheetData);
-  if (!sheetCheck.success) {
-    throw badRequest(
-      'INVALID_CHARACTER_SHEET',
-      sheetCheck.error.issues[0]?.message ?? 'La fitxa resultant no compleix l’esquema v2.',
-      sheetCheck.error.issues
-    );
-  }
-  const validatedSheet = sheetCheck.data as Dnd5e2014SheetData;
-
-  const creationConfig = normalizeCampaignCreationConfig(access.campaign.creationConfig);
-  const allTouchedForCreation = [
-    ...(patch.name !== undefined ? ['name'] : []),
-    ...(patch.sheetFields ? Object.keys(patch.sheetFields) : []),
-    ...sheetPatchTouched,
-  ];
-  const creationValidation = validateCharacterAgainstCampaignConfig(
-    validatedSheet,
-    creationConfig,
-    {
-      isGm,
-      isCreation: false,
-      touchedPaths: allTouchedForCreation,
-    }
-  );
-  if (!creationValidation.valid) {
-    throw badRequest(
-      'CREATION_RESTRICTION_VIOLATION',
-      creationValidation.violations[0] ?? 'Els canvis incompleixen les regles de la campanya.',
-      { violations: creationValidation.violations }
-    );
-  }
-  const extraWarnings: string[] = [...creationValidation.warnings];
-  if (
-    parsedSheetPatch?.raceAndClass?.classes !== undefined &&
-    validatedSheet.raceAndClass.classes.length >= 2
-  ) {
-    const mcCheck = validateMulticlassPrerequisites(
-      validatedSheet.raceAndClass.classes,
-      validatedSheet.abilities
-    );
-    if (!mcCheck.eligible) {
-      if (!isGm) {
-        throw badRequest(
-          'MULTICLASS_PREREQUISITES_NOT_MET',
-          mcCheck.unmetRequirements[0] ??
-            'No compleixes els requisits oficials de multiclasse de D&D 5e (2014).',
-          { unmetRequirements: mcCheck.unmetRequirements }
-        );
-      }
-      extraWarnings.push(...mcCheck.unmetRequirements);
-    }
-  }
-  if (parsedSheetPatch?.spells !== undefined) {
-    assertPlayerPreparedSpellLimits(validatedSheet, isGm);
-  }
-
-  if (patch.customFields) {
-    for (const [key, value] of Object.entries(patch.customFields)) {
-      const cleanKey = key.trim();
-      if (!cleanKey) continue;
-      if (value === null || value === undefined) {
-        delete nextCustomFields[cleanKey];
-      } else {
-        nextCustomFields[cleanKey] = value;
-      }
-      changedFields.push(`customFields.${cleanKey}`);
-    }
-  }
-
-  if (isGm) {
-    if (patch.gmNotes !== undefined) {
-      nextGmNotes = patch.gmNotes;
-      changedFields.push('gmNotes');
-    }
-    if (patch.fieldPermissions !== undefined) {
-      nextFieldPermissions = normalizeFieldPermissions({
-        playerEditableFields:
-          patch.fieldPermissions.playerEditableFields !== undefined
-            ? patch.fieldPermissions.playerEditableFields
-            : perms.playerEditableFields,
-        gmOnlyFields:
-          patch.fieldPermissions.gmOnlyFields !== undefined
-            ? patch.fieldPermissions.gmOnlyFields
-            : perms.gmOnlyFields,
-        authorizedOverrideFields:
-          patch.fieldPermissions.authorizedOverrideFields !== undefined
-            ? patch.fieldPermissions.authorizedOverrideFields
-            : perms.authorizedOverrideFields,
-      });
-      changedFields.push('fieldPermissions');
-    }
-    if (patch.memberId !== undefined) {
-      if (patch.memberId === null) {
-        nextMemberId = null;
-      } else {
-        const [member] = await db
-          .select({ id: campaignMembers.id })
-          .from(campaignMembers)
-          .where(
-            and(
-              eq(campaignMembers.id, patch.memberId),
-              eq(campaignMembers.campaignId, access.campaign.id),
-              eq(campaignMembers.status, 'active')
-            )
-          )
-          .limit(1);
-
-        if (!member) {
-          throw badRequest('INVALID_MEMBER', 'El jugador indicat no pertany a aquesta campanya.');
-        }
-        nextMemberId = member.id;
-      }
-      changedFields.push('memberId');
-    }
-  }
-
-  await db
-    .update(characters)
-    .set({
-      name: nextName,
-      schemaVersion: systemDef.schemaVersion,
-      sheetData: validatedSheet,
-      customFields: nextCustomFields,
-      gmNotes: nextGmNotes,
-      fieldPermissions: nextFieldPermissions,
-      memberId: nextMemberId,
-      updatedAt: new Date(),
-    })
-    .where(and(eq(characters.id, existing.id), eq(characters.campaignId, access.campaign.id)));
+    return {
+      existingId: existing.id,
+      changedFields: Array.from(new Set(changedFields)),
+      extraWarnings,
+    };
+  });
 
   await recordAuditLog(db, {
     actorUserId: ctx?.kind === 'user' ? ctx.user.id : null,
@@ -832,14 +916,14 @@ export async function updateCharacterBase(
     campaignId: access.campaign.id,
     action: 'character.updated',
     targetType: 'character',
-    targetId: existing.id,
-    metadata: { changedFields: Array.from(new Set(changedFields)) },
+    targetId: txResult.existingId,
+    metadata: { changedFields: txResult.changedFields },
   });
 
-  const updatedCharacter = await getCampaignCharacter(db, ctx, campaignId, existing.id);
+  const updatedCharacter = await getCampaignCharacter(db, ctx, campaignId, txResult.existingId);
   return {
     ...updatedCharacter,
-    warnings: extraWarnings,
+    warnings: txResult.extraWarnings,
   };
 }
 

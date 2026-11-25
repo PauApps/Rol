@@ -20,6 +20,7 @@ import {
   calculateProficiencyBonus,
   calculateTotalLevel,
   computeDnd5e2014Sheet,
+  computeProgression,
   computeSpellcasting,
   type ComputedSpellcasting,
 } from './rules';
@@ -200,6 +201,143 @@ export function validateMulticlassPrerequisites(
   };
 }
 
+export type LevelUpErrorCode =
+  | 'LEVEL_UP_NO_CLASS'
+  | 'LEVEL_UP_MAX_LEVEL_REACHED'
+  | 'LEVEL_UP_SKIP_FORBIDDEN'
+  | 'INSUFFICIENT_XP_FOR_LEVEL_UP'
+  | 'STALE_LEVEL_UP_STATE'
+  | 'LEVEL_UP_XP_MUTATION_FORBIDDEN';
+
+export interface LevelUpEligibilityResult {
+  allowed: boolean;
+  code: LevelUpErrorCode | null;
+  reason: string | null;
+  currentLevel: number;
+  nextLevel: number | null;
+  currentXp: number;
+  requiredXpForNextLevel: number | null;
+  xpMissing: number;
+}
+
+/**
+ * Evaluates whether a character is officially eligible to advance +1 level under D&D 5e (2014) rules:
+ * - XP is cumulative (never spent on level-up).
+ * - Only single-step advances (`currentLevel + 1`, capped at 20) are allowed.
+ * - Cumulative XP must meet or exceed the official threshold (`XP_THRESHOLDS_2014` via `computeProgression`).
+ */
+export function evaluateLevelUpEligibility(
+  sheet: Dnd5e2014SheetData,
+  options?: {
+    targetLevel?: number;
+    expectedCurrentLevel?: number;
+  }
+): LevelUpEligibilityResult {
+  const currentLevel = calculateTotalLevel(sheet);
+  const prog = computeProgression(sheet, currentLevel);
+  const currentXp = prog.experiencePoints;
+
+  if (
+    options?.expectedCurrentLevel !== undefined &&
+    options.expectedCurrentLevel !== currentLevel
+  ) {
+    return {
+      allowed: false,
+      code: 'STALE_LEVEL_UP_STATE',
+      reason: `L’estat del personatge ha canviat (nivell actual ${currentLevel}, esperat ${options.expectedCurrentLevel}). Recarrega la fitxa abans de tornar-ho a intentar.`,
+      currentLevel,
+      nextLevel: prog.nextLevel,
+      currentXp,
+      requiredXpForNextLevel: prog.nextLevelXp,
+      xpMissing: prog.xpToNextLevel ?? 0,
+    };
+  }
+
+  if (sheet.raceAndClass.classes.length === 0) {
+    return {
+      allowed: false,
+      code: 'LEVEL_UP_NO_CLASS',
+      reason: 'Assigna primer una classe inicial abans de pujar de nivell.',
+      currentLevel,
+      nextLevel: null,
+      currentXp,
+      requiredXpForNextLevel: null,
+      xpMissing: 0,
+    };
+  }
+
+  if (
+    prog.isMaxLevel ||
+    (options?.targetLevel !== undefined && options.targetLevel > MAX_OFFICIAL_LEVEL_2014)
+  ) {
+    return {
+      allowed: false,
+      code: 'LEVEL_UP_MAX_LEVEL_REACHED',
+      reason:
+        prog.maxLevelMessageCa ??
+        'El personatge ja ha assolit el nivell màxim oficial (20) de D&D 5e (2014).',
+      currentLevel,
+      nextLevel: null,
+      currentXp,
+      requiredXpForNextLevel: null,
+      xpMissing: 0,
+    };
+  }
+
+  const nextLevel = prog.nextLevel!;
+  const requiredXp = prog.nextLevelXp!;
+
+  if (options?.targetLevel !== undefined && options.targetLevel !== nextLevel) {
+    if (options.targetLevel > nextLevel) {
+      return {
+        allowed: false,
+        code: 'LEVEL_UP_SKIP_FORBIDDEN',
+        reason: `Només es pot pujar un nivell per operació (de nivell ${currentLevel} a ${nextLevel}); no es permet saltar al nivell ${options.targetLevel}.`,
+        currentLevel,
+        nextLevel,
+        currentXp,
+        requiredXpForNextLevel: requiredXp,
+        xpMissing: Math.max(0, requiredXp - currentXp),
+      };
+    }
+    return {
+      allowed: false,
+      code: 'STALE_LEVEL_UP_STATE',
+      reason: `El personatge ja es troba al nivell ${currentLevel}; aquesta operació de pujada al nivell ${options.targetLevel} ha quedat obsoleta.`,
+      currentLevel,
+      nextLevel,
+      currentXp,
+      requiredXpForNextLevel: requiredXp,
+      xpMissing: Math.max(0, requiredXp - currentXp),
+    };
+  }
+
+  if (currentXp < requiredXp) {
+    const xpMissing = requiredXp - currentXp;
+    return {
+      allowed: false,
+      code: 'INSUFFICIENT_XP_FOR_LEVEL_UP',
+      reason: `Calen ${requiredXp.toLocaleString('ca-ES')} PE acumulats per pujar al nivell ${nextLevel} (actuals: ${currentXp.toLocaleString('ca-ES')} PE; en falten ${xpMissing.toLocaleString('ca-ES')} PE).`,
+      currentLevel,
+      nextLevel,
+      currentXp,
+      requiredXpForNextLevel: requiredXp,
+      xpMissing,
+    };
+  }
+
+  return {
+    allowed: true,
+    code: null,
+    reason: null,
+    currentLevel,
+    nextLevel,
+    currentXp,
+    requiredXpForNextLevel: requiredXp,
+    xpMissing: 0,
+  };
+}
+
 export interface LevelUpSelection {
   mode: 'existing' | 'multiclass';
   classId: string;
@@ -220,11 +358,18 @@ export interface LevelUpResourceDelta {
 export interface LevelUpPreview {
   canLevelUp: boolean;
   blockReason: string | null;
+  eligibilityCode: LevelUpErrorCode | null;
   currentTotalLevel: number;
   nextTotalLevel: number;
   currentClassLevel: number;
   nextClassLevel: number;
   classLabelCa: string;
+  xp: {
+    currentXp: number;
+    requiredXpForNextLevel: number | null;
+    xpMissing: number;
+    hasEnoughXp: boolean;
+  };
   isMulticlassAddition: boolean;
   multiclassCheck: {
     eligible: boolean;
@@ -309,7 +454,8 @@ export function previewLevelUp(
   sheet: Dnd5e2014SheetData,
   selection: LevelUpSelection
 ): LevelUpPreview {
-  const currentTotalLevel = sheet.raceAndClass.classes.length > 0 ? calculateTotalLevel(sheet) : 0;
+  const eligibility = evaluateLevelUpEligibility(sheet);
+  const currentTotalLevel = calculateTotalLevel(sheet);
   const classMeta = getClassEntry(selection.classId);
   const existingEntry =
     selection.mode === 'existing'
@@ -323,14 +469,17 @@ export function previewLevelUp(
     selection.classId !== 'custom' &&
     sheet.raceAndClass.classes.some((c) => c.classId === selection.classId);
 
-  let blockReason: string | null = null;
-  if (currentTotalLevel >= MAX_OFFICIAL_LEVEL_2014) {
-    blockReason = 'El personatge ja ha assolit el nivell màxim oficial (20) de D&D 5e (2014).';
-  } else if (selection.mode === 'existing' && !existingEntry) {
+  let blockReason: string | null = eligibility.allowed ? null : eligibility.reason;
+  if (!blockReason && selection.mode === 'existing' && !existingEntry) {
     blockReason = 'La classe seleccionada no forma part del personatge actual.';
-  } else if (duplicateOfficial) {
+  } else if (!blockReason && duplicateOfficial) {
     blockReason = 'Aquesta classe oficial ja existeix al personatge; puja-la des del selector existent.';
-  } else if (selection.mode === 'multiclass' && selection.classId === 'custom' && !selection.customClassName?.trim()) {
+  } else if (
+    !blockReason &&
+    selection.mode === 'multiclass' &&
+    selection.classId === 'custom' &&
+    !selection.customClassName?.trim()
+  ) {
     blockReason = 'Cal indicar un nom per a la classe personalitzada.';
   }
 
@@ -443,11 +592,18 @@ export function previewLevelUp(
   return {
     canLevelUp: blockReason === null,
     blockReason,
+    eligibilityCode: eligibility.code,
     currentTotalLevel,
     nextTotalLevel,
     currentClassLevel,
     nextClassLevel,
     classLabelCa,
+    xp: {
+      currentXp: eligibility.currentXp,
+      requiredXpForNextLevel: eligibility.requiredXpForNextLevel,
+      xpMissing: eligibility.xpMissing,
+      hasEnoughXp: eligibility.code !== 'INSUFFICIENT_XP_FOR_LEVEL_UP',
+    },
     isMulticlassAddition,
     multiclassCheck: {
       eligible: mcCheck.eligible,

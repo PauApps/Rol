@@ -1000,6 +1000,13 @@ export const updateCharacterRequestSchema = z
     gmNotes: z.string().max(8000).optional(),
     fieldPermissions: characterFieldPermissionsSchema.optional(),
     memberId: z.string().uuid().nullable().optional(),
+    expectedCurrentLevel: z
+      .number()
+      .int()
+      .min(MIN_OFFICIAL_LEVEL_2014)
+      .max(MAX_OFFICIAL_LEVEL_2014)
+      .optional(),
+    expectedUpdatedAt: z.string().trim().min(1).max(40).optional(),
   })
   .strict();
 

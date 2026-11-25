@@ -30,6 +30,7 @@ interface LevelUpModalProps {
   character: CharacterSheetRecord;
   access: SheetAccessContext;
   onApplied: (nextCharacter: CharacterSheetRecord, warnings: string[]) => void;
+  onSyncFromServer?: () => Promise<void>;
 }
 
 export function LevelUpModal({
@@ -39,6 +40,7 @@ export function LevelUpModal({
   character,
   access,
   onApplied,
+  onSyncFromServer,
 }: LevelUpModalProps) {
   const normalized = useMemo(
     () => normalizeDnd5e2014Sheet(character.sheetData, character.name),
@@ -157,11 +159,18 @@ export function LevelUpModal({
       const response = await fetch(`/api/campaigns/${campaignId}/characters/${character.id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ sheetPatch: built.patch }),
+        body: JSON.stringify({
+          sheetPatch: built.patch,
+          expectedCurrentLevel: preview.currentTotalLevel,
+          expectedUpdatedAt: character.updatedAt,
+        }),
       });
       const data = await response.json();
       if (!response.ok) {
         setError(data?.error?.message ?? 'No s’ha pogut aplicar la pujada de nivell.');
+        if (onSyncFromServer) {
+          await onSyncFromServer();
+        }
         return;
       }
       const nextChar = data.character as CharacterSheetRecord & { warnings?: string[] };
@@ -290,18 +299,36 @@ export function LevelUpModal({
           )}
         </div>
 
-        {/* Resum de nivell i competència */}
-        <div className="flex flex-wrap items-center gap-2 text-xs">
-          <Badge tone="gold">
-            <ArrowUpCircle className="h-3 w-3" />
-            Nivell total: {preview.currentTotalLevel} → {preview.nextTotalLevel}
-          </Badge>
-          <Badge tone={preview.proficiencyBonusIncreased ? 'success' : 'neutral'}>
-            Competència: {formatSigned(preview.proficiencyBonusBefore)} →{' '}
-            {formatSigned(preview.proficiencyBonusAfter)}
-          </Badge>
-          {preview.hp.hitDie && (
-            <Badge tone="neutral">Dau de cop: d{preview.hp.hitDie}</Badge>
+        {/* Resum de nivell, PE requerits i competència */}
+        <div className="space-y-2 rounded-[var(--rol-radius-md)] border border-[var(--rol-border-subtle)] bg-[var(--rol-bg-surface-alt)]/30 p-3">
+          <div className="flex flex-wrap items-center gap-2 text-xs">
+            <Badge tone="gold">
+              <ArrowUpCircle className="h-3 w-3" />
+              Nivell actual: {preview.currentTotalLevel} → Següent: {preview.nextTotalLevel}
+            </Badge>
+            <Badge tone={preview.xp.hasEnoughXp ? 'success' : 'danger'}>
+              PE acumulats: {preview.xp.currentXp.toLocaleString('ca-ES')} /{' '}
+              {preview.xp.requiredXpForNextLevel?.toLocaleString('ca-ES') ?? '—'} PE
+            </Badge>
+            <Badge tone={preview.proficiencyBonusIncreased ? 'success' : 'neutral'}>
+              Competència: {formatSigned(preview.proficiencyBonusBefore)} →{' '}
+              {formatSigned(preview.proficiencyBonusAfter)}
+            </Badge>
+            {preview.hp.hitDie && (
+              <Badge tone="neutral">Dau de cop: d{preview.hp.hitDie}</Badge>
+            )}
+          </div>
+          <p className="text-[11px] text-[var(--rol-ink-muted)]">
+            Els PE són acumulatius i no es consumeixen en pujar de nivell. Cada operació incrementa exactament 1 nivell.
+          </p>
+          {!preview.canLevelUp && preview.blockReason && (
+            <div
+              role="alert"
+              className="flex items-start gap-2 rounded border border-[var(--rol-status-danger-border)] bg-[var(--rol-status-danger-bg)] px-2.5 py-2 text-xs text-[var(--rol-status-danger-ink)]"
+            >
+              <ShieldAlert className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+              <span>{preview.blockReason}</span>
+            </div>
           )}
         </div>
 

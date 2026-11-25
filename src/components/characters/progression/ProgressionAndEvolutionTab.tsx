@@ -16,6 +16,7 @@ interface ProgressionAndEvolutionTabProps {
   hasUnsavedChanges: boolean;
   onUpdateDraft: (updater: (prev: CharacterSheetDraft) => CharacterSheetDraft) => void;
   onLevelUpApplied: (nextCharacter: CharacterSheetRecord, warnings: string[]) => void;
+  onSyncFromServer?: () => Promise<void>;
 }
 
 export function ProgressionAndEvolutionTab({
@@ -26,6 +27,7 @@ export function ProgressionAndEvolutionTab({
   hasUnsavedChanges,
   onUpdateDraft,
   onLevelUpApplied,
+  onSyncFromServer,
 }: ProgressionAndEvolutionTabProps) {
   const [levelUpOpen, setLevelUpOpen] = useState(false);
 
@@ -58,6 +60,7 @@ export function ProgressionAndEvolutionTab({
           character={character}
           access={access}
           onApplied={onLevelUpApplied}
+          onSyncFromServer={onSyncFromServer}
         />
       )}
     </div>
