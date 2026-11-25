@@ -1,13 +1,23 @@
 import type {
   AbilityKey,
+  ArmorType,
   ComputedDnd5e2014Snapshot,
   Dnd5e2014AbilityScores,
   Dnd5e2014AttackEntry,
+  Dnd5e2014CustomResource,
   Dnd5e2014HitDiceUsedByDie,
+  Dnd5e2014InventoryItem,
   Dnd5e2014SheetData,
+  Dnd5e2014SpellEntry,
+  Dnd5e2014SpellcastingSourceOverride,
+  Dnd5e2014TraitEntry,
+  InventoryCategory,
   NormalizedCharacterFieldPermissions,
+  ResourceRecovery,
   RollMode,
   SkillId,
+  SpellSourceType,
+  SpellcastingModel,
 } from '@/domain/systems/dnd5e-2014';
 
 export type CharacterTabId = 'combat' | 'magic' | 'inventory' | 'story' | 'progression';
@@ -30,13 +40,13 @@ export const CHARACTER_TABS: readonly CharacterTabDefinition[] = [
     id: 'magic',
     label: 'Màgia i habilitats',
     shortLabel: 'Màgia',
-    plannedIncrement: 'Increment 3C.2',
+    plannedIncrement: null,
   },
   {
     id: 'inventory',
     label: 'Equipament i inventari',
     shortLabel: 'Inventari',
-    plannedIncrement: 'Increment 3C.2',
+    plannedIncrement: null,
   },
   {
     id: 'story',
@@ -51,6 +61,46 @@ export const CHARACTER_TABS: readonly CharacterTabDefinition[] = [
     plannedIncrement: 'Increment 3C.3',
   },
 ] as const;
+
+export const RECOVERY_LABELS_CA: Record<ResourceRecovery, string> = {
+  short_rest: 'Descans curt',
+  long_rest: 'Descans llarg',
+  dawn: 'A l’alba',
+  other: 'Altre / manual',
+};
+
+export const SPELL_MODEL_LABELS_CA: Record<SpellcastingModel, string> = {
+  prepared: 'Conjurs preparats',
+  known: 'Conjurs coneguts',
+  spellbook: 'Grimori + preparats',
+  pact: 'Màgia de Pacte',
+  none: 'Sense màgia',
+};
+
+export const SPELL_SOURCE_TYPE_LABELS_CA: Record<SpellSourceType, string> = {
+  class: 'Classe',
+  pact: 'Pacte',
+  feature: 'Tret / Dot',
+  race: 'Raça',
+  item: 'Objecte màgic',
+  custom: 'Altre',
+};
+
+export const INVENTORY_CATEGORY_LABELS_CA: Record<InventoryCategory, string> = {
+  weapon: 'Armes',
+  armor: 'Armadures',
+  shield: 'Escuts',
+  gear: 'Equipament',
+  magic_item: 'Objectes màgics',
+  treasure: 'Tresors',
+  custom: 'Altres objectes',
+};
+
+export const ARMOR_TYPE_LABELS_CA: Record<ArmorType, string> = {
+  light: 'Lleugera',
+  medium: 'Mitjana',
+  heavy: 'Pesada',
+};
 
 export interface CharacterSheetRecord {
   id: string;
@@ -125,6 +175,31 @@ export interface CharacterSheetDraft {
     climb: number | null;
   };
   attacks: Dnd5e2014AttackEntry[];
+  spellcasting: {
+    abilityOverride: AbilityKey | null;
+    saveDcOverride: number | null;
+    attackBonusOverride: number | null;
+    sourceOverrides: Record<string, Dnd5e2014SpellcastingSourceOverride>;
+    usesSpellbook: boolean;
+    notes: string;
+  };
+  spells: Dnd5e2014SpellEntry[];
+  spellSlotsUsed: Record<string, number>;
+  spellSlotOverrides: Record<string, number>;
+  resourceUsage: Record<string, number>;
+  customResources: Dnd5e2014CustomResource[];
+  traitsAndFeatures: Dnd5e2014TraitEntry[];
+  inventory: Dnd5e2014InventoryItem[];
+  attunement: {
+    limitOverride: number | null;
+  };
+  currency: {
+    cp: number;
+    sp: number;
+    ep: number;
+    gp: number;
+    pp: number;
+  };
 }
 
 export function formatSigned(value: number | null | undefined): string {

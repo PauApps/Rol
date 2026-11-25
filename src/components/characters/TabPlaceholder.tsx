@@ -1,46 +1,24 @@
 'use client';
 
-import { Backpack, BookOpen, Clock, Sparkles, TrendingUp } from 'lucide-react';
+import { BookOpen, Clock, TrendingUp } from 'lucide-react';
 import { Badge } from '@/components/ui/Badge';
 import { Card } from '@/components/ui/Card';
 import type { CharacterTabId } from './types';
 
 interface TabPlaceholderProps {
-  tabId: Exclude<CharacterTabId, 'combat'>;
+  tabId: Extract<CharacterTabId, 'story' | 'progression'>;
 }
 
 const PLACEHOLDER_META: Record<
-  Exclude<CharacterTabId, 'combat'>,
+  Extract<CharacterTabId, 'story' | 'progression'>,
   {
     title: string;
     subtitle: string;
     incrementLabel: string;
     details: string[];
-    icon: typeof Sparkles;
+    icon: typeof BookOpen;
   }
 > = {
-  magic: {
-    title: 'Màgia i habilitats',
-    subtitle: 'Conjurs, espais de conjur, trets de classe i recursos especials.',
-    incrementLabel: 'Planificat per a l’Increment 3C.2',
-    details: [
-      'Fonts de màgia per classe i multiclasse amb CD i bonificador calculats al servidor.',
-      'Gestió d’espais de conjur (1r–9è cercle i Màgia de Pacte), grimori i límit de preparats.',
-      'Trets, aptituds, competències d’armes/armadures/idiomes i usos de recursos modulars.',
-    ],
-    icon: Sparkles,
-  },
-  inventory: {
-    title: 'Equipament i inventari',
-    subtitle: 'Armes, armadures, sintonització màgica, monedes i càrrega.',
-    incrementLabel: 'Planificat per a l’Increment 3C.2',
-    details: [
-      'Equipament d’armes i armadures connectat automàticament amb la pestanya de combat i la CA.',
-      'Control de sintonització (màxim oficial de 3 objectes o excepció del GM) i recompte de pes.',
-      'Moneder complet (PC, PP, PE, PO, PPT) i notes d’objectes.',
-    ],
-    icon: Backpack,
-  },
   story: {
     title: 'Història i diari',
     subtitle: 'Identitat narrativa, rerefons i notes de sessió.',
@@ -86,7 +64,7 @@ export function TabPlaceholder({ tabId }: TabPlaceholderProps) {
             <Icon className="h-6 w-6" />
           </div>
           <div className="space-y-2.5 text-sm text-[var(--rol-ink-secondary)]">
-            <p className="text-[var(--rol-ink-primary)] font-medium">
+            <p className="font-medium text-[var(--rol-ink-primary)]">
               Aquesta secció s’incorporarà en els propers increments de la Fase 3C sense perdre les
               dades existents de la fitxa.
             </p>

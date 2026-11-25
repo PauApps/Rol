@@ -2,9 +2,16 @@ import {
   ABILITY_KEYS,
   HIT_DIE_KEYS,
   SKILL_IDS,
+  SPELL_SLOT_KEYS,
+  getAllowedOfficialWeaponAbilities,
   type AbilityKey,
   type Dnd5e2014AttackEntry,
+  type Dnd5e2014CustomResource,
   type Dnd5e2014HitDiceUsedByDie,
+  type Dnd5e2014InventoryItem,
+  type Dnd5e2014SpellEntry,
+  type Dnd5e2014SpellcastingSourceOverride,
+  type Dnd5e2014TraitEntry,
   type RollMode,
   type SkillId,
 } from '@/domain/systems/dnd5e-2014';
@@ -55,6 +62,25 @@ export function createDraftFromCharacter(record: CharacterSheetRecord): Characte
       climb: s.speed.climb,
     },
     attacks: s.attacks.map((atk) => ({ ...atk })),
+    spellcasting: {
+      abilityOverride: s.spellcasting.abilityOverride,
+      saveDcOverride: s.spellcasting.saveDcOverride,
+      attackBonusOverride: s.spellcasting.attackBonusOverride,
+      sourceOverrides: structuredClone(s.spellcasting.sourceOverrides ?? {}),
+      usesSpellbook: s.spellcasting.usesSpellbook,
+      notes: s.spellcasting.notes,
+    },
+    spells: s.spells.map((sp) => ({ ...sp })),
+    spellSlotsUsed: { ...s.spellSlotsUsed },
+    spellSlotOverrides: { ...s.spellSlotOverrides },
+    resourceUsage: { ...s.resourceUsage },
+    customResources: s.customResources.map((r) => ({ ...r })),
+    traitsAndFeatures: s.traitsAndFeatures.map((t) => ({ ...t })),
+    inventory: s.inventory.map((i) => ({ ...i })),
+    attunement: {
+      limitOverride: s.attunement?.limitOverride ?? null,
+    },
+    currency: { ...s.currency },
   };
 }
 
@@ -99,6 +125,141 @@ function sameAttacksArray(
   return true;
 }
 
+function sameSpellEntry(a: Dnd5e2014SpellEntry, b: Dnd5e2014SpellEntry): boolean {
+  return (
+    a.id === b.id &&
+    a.level === b.level &&
+    a.name === b.name &&
+    a.castingTime === b.castingTime &&
+    a.range === b.range &&
+    a.components === b.components &&
+    a.duration === b.duration &&
+    a.school === b.school &&
+    a.sourceType === b.sourceType &&
+    a.sourceClassId === b.sourceClassId &&
+    a.alwaysPrepared === b.alwaysPrepared &&
+    a.prepared === b.prepared &&
+    a.inSpellbook === b.inSpellbook &&
+    a.ritual === b.ritual &&
+    a.concentration === b.concentration &&
+    a.notes === b.notes
+  );
+}
+
+function sameSpellsArray(
+  a: readonly Dnd5e2014SpellEntry[],
+  b: readonly Dnd5e2014SpellEntry[]
+): boolean {
+  if (a.length !== b.length) return false;
+  for (let i = 0; i < a.length; i++) {
+    if (!sameSpellEntry(a[i], b[i])) return false;
+  }
+  return true;
+}
+
+function sameTraitEntry(a: Dnd5e2014TraitEntry, b: Dnd5e2014TraitEntry): boolean {
+  return (
+    a.id === b.id &&
+    a.name === b.name &&
+    a.source === b.source &&
+    a.levelUnlocked === b.levelUnlocked &&
+    a.description === b.description
+  );
+}
+
+function sameTraitsArray(
+  a: readonly Dnd5e2014TraitEntry[],
+  b: readonly Dnd5e2014TraitEntry[]
+): boolean {
+  if (a.length !== b.length) return false;
+  for (let i = 0; i < a.length; i++) {
+    if (!sameTraitEntry(a[i], b[i])) return false;
+  }
+  return true;
+}
+
+function sameCustomResource(a: Dnd5e2014CustomResource, b: Dnd5e2014CustomResource): boolean {
+  return (
+    a.id === b.id &&
+    a.name === b.name &&
+    a.maxUses === b.maxUses &&
+    a.recovery === b.recovery &&
+    a.description === b.description
+  );
+}
+
+function sameCustomResourcesArray(
+  a: readonly Dnd5e2014CustomResource[],
+  b: readonly Dnd5e2014CustomResource[]
+): boolean {
+  if (a.length !== b.length) return false;
+  for (let i = 0; i < a.length; i++) {
+    if (!sameCustomResource(a[i], b[i])) return false;
+  }
+  return true;
+}
+
+function sameInventoryItem(a: Dnd5e2014InventoryItem, b: Dnd5e2014InventoryItem): boolean {
+  return (
+    a.id === b.id &&
+    a.name === b.name &&
+    a.category === b.category &&
+    a.quantity === b.quantity &&
+    a.weight === b.weight &&
+    a.equipped === b.equipped &&
+    a.armorType === b.armorType &&
+    a.baseAc === b.baseAc &&
+    a.acBonus === b.acBonus &&
+    a.requiresAttunement === b.requiresAttunement &&
+    a.attuned === b.attuned &&
+    a.weaponAbility === b.weaponAbility &&
+    a.weaponAbilityOverride === b.weaponAbilityOverride &&
+    a.weaponProficient === b.weaponProficient &&
+    a.damage === b.damage &&
+    a.damageType === b.damageType &&
+    a.weaponRange === b.weaponRange &&
+    a.weaponProperties === b.weaponProperties &&
+    a.notes === b.notes
+  );
+}
+
+function sameInventoryArray(
+  a: readonly Dnd5e2014InventoryItem[],
+  b: readonly Dnd5e2014InventoryItem[]
+): boolean {
+  if (a.length !== b.length) return false;
+  for (let i = 0; i < a.length; i++) {
+    if (!sameInventoryItem(a[i], b[i])) return false;
+  }
+  return true;
+}
+
+function normalizeSourceOverride(
+  val: Dnd5e2014SpellcastingSourceOverride | undefined
+): { abilityOverride: AbilityKey | null; saveDcOverride: number | null; attackBonusOverride: number | null } | null {
+  if (!val) return null;
+  const abilityOverride = val.abilityOverride ?? null;
+  const saveDcOverride = val.saveDcOverride ?? null;
+  const attackBonusOverride = val.attackBonusOverride ?? null;
+  if (abilityOverride === null && saveDcOverride === null && attackBonusOverride === null) {
+    return null;
+  }
+  return { abilityOverride, saveDcOverride, attackBonusOverride };
+}
+
+function sameNormalizedSourceOverride(
+  a: { abilityOverride: AbilityKey | null; saveDcOverride: number | null; attackBonusOverride: number | null } | null,
+  b: { abilityOverride: AbilityKey | null; saveDcOverride: number | null; attackBonusOverride: number | null } | null
+): boolean {
+  if (!a && !b) return true;
+  if (!a || !b) return false;
+  return (
+    a.abilityOverride === b.abilityOverride &&
+    a.saveDcOverride === b.saveDcOverride &&
+    a.attackBonusOverride === b.attackBonusOverride
+  );
+}
+
 function sanitizeAttacksForActor(
   baseAttacks: readonly Dnd5e2014AttackEntry[],
   draftAttacks: readonly Dnd5e2014AttackEntry[],
@@ -117,12 +278,14 @@ function sanitizeAttacksForActor(
 
   const result: Dnd5e2014AttackEntry[] = [];
 
-  // Preserve locked GM custom attacks & inventory weapon overrides untouched when player lacks override permissions
   for (const prev of baseAttacks) {
     if (prev.kind === 'gm_custom' && !canGmCustom) {
       result.push({ ...prev });
     } else if (prev.inventoryItemId !== null) {
-      result.push({ ...prev });
+      // Keep existing weapon_override only if still retained in draftAttacks
+      if (draftAttacks.some((d) => d.id === prev.id)) {
+        result.push({ ...prev });
+      }
     }
   }
 
@@ -180,6 +343,74 @@ function sanitizeAttacksForActor(
   }
 
   return result;
+}
+
+function sanitizeSpellsForActor(
+  baseSpells: readonly Dnd5e2014SpellEntry[],
+  draftSpells: readonly Dnd5e2014SpellEntry[],
+  access: SheetAccessContext
+): Dnd5e2014SpellEntry[] {
+  if (access.isGm) {
+    return draftSpells.map((sp) => ({ ...sp }));
+  }
+  const baseById = new Map(baseSpells.map((s) => [s.id, s]));
+  return draftSpells.map((sp) => {
+    const prev = baseById.get(sp.id);
+    return {
+      ...sp,
+      // Only GM can alter `alwaysPrepared`
+      alwaysPrepared: prev ? prev.alwaysPrepared : false,
+    };
+  });
+}
+
+function sanitizeInventoryForActor(
+  base: CharacterSheetRecord,
+  draftInventory: readonly Dnd5e2014InventoryItem[],
+  access: SheetAccessContext
+): Dnd5e2014InventoryItem[] {
+  if (access.isGm) {
+    return draftInventory.map((item) => ({
+      ...item,
+      attuned: item.requiresAttunement ? item.attuned : false,
+    }));
+  }
+
+  const baseById = new Map(base.sheetData.inventory.map((i) => [i.id, i]));
+  const canWeaponProf = canEditSheetField('inventory.weaponProficient', access);
+  const canWeaponAbilityOverride = canEditSheetField('inventory.weaponAbilityOverride', access);
+  const classes = base.sheetData.raceAndClass.classes;
+
+  return draftInventory.map((item) => {
+    const prev = baseById.get(item.id);
+    const weaponProficient = canWeaponProf
+      ? item.weaponProficient
+      : (prev?.weaponProficient ?? false);
+    const weaponAbilityOverride = canWeaponAbilityOverride
+      ? item.weaponAbilityOverride
+      : (prev?.weaponAbilityOverride ?? null);
+
+    let weaponAbility = item.weaponAbility;
+    if (item.category === 'weapon' && weaponAbility !== null) {
+      const allowed = getAllowedOfficialWeaponAbilities(item, classes);
+      if (!allowed.includes(weaponAbility) && !canWeaponAbilityOverride) {
+        weaponAbility =
+          prev && prev.weaponAbility !== null && allowed.includes(prev.weaponAbility)
+            ? prev.weaponAbility
+            : null;
+      }
+    } else if (item.category !== 'weapon') {
+      weaponAbility = null;
+    }
+
+    return {
+      ...item,
+      attuned: item.requiresAttunement ? item.attuned : false,
+      weaponAbility,
+      weaponAbilityOverride,
+      weaponProficient,
+    };
+  });
 }
 
 export interface BuiltCharacterSheetPatch {
@@ -358,7 +589,6 @@ export function buildCharacterSheetPatch(
     canEditSheetField('hitPoints.hitDiceUsed', access) &&
     draft.hitPoints.hitDiceUsed !== base.sheetData.hitPoints.hitDiceUsed
   ) {
-    // Legacy sheet with unallocated split: never invent hitDiceUsedByDie
     hpPatch.hitDiceUsed = draft.hitPoints.hitDiceUsed;
   }
 
@@ -437,6 +667,167 @@ export function buildCharacterSheetPatch(
       sheetPatch.attacks = sanitizedAttacks;
       changedLabels.push('Atacs');
     }
+  }
+
+  // 9. Spellcasting config & protected overrides
+  const scPatch: Record<string, unknown> = {};
+  if (
+    canEditSheetField('spellcasting.usesSpellbook', access) &&
+    draft.spellcasting.usesSpellbook !== base.sheetData.spellcasting.usesSpellbook
+  ) {
+    scPatch.usesSpellbook = draft.spellcasting.usesSpellbook;
+  }
+  if (
+    canEditSheetField('spellcasting.notes', access) &&
+    draft.spellcasting.notes !== base.sheetData.spellcasting.notes
+  ) {
+    scPatch.notes = draft.spellcasting.notes;
+  }
+  if (
+    canEditSheetField('spellcasting.abilityOverride', access) &&
+    draft.spellcasting.abilityOverride !== base.sheetData.spellcasting.abilityOverride
+  ) {
+    scPatch.abilityOverride = draft.spellcasting.abilityOverride;
+  }
+  if (
+    canEditSheetField('spellcasting.saveDcOverride', access) &&
+    draft.spellcasting.saveDcOverride !== base.sheetData.spellcasting.saveDcOverride
+  ) {
+    scPatch.saveDcOverride = draft.spellcasting.saveDcOverride;
+  }
+  if (
+    canEditSheetField('spellcasting.attackBonusOverride', access) &&
+    draft.spellcasting.attackBonusOverride !== base.sheetData.spellcasting.attackBonusOverride
+  ) {
+    scPatch.attackBonusOverride = draft.spellcasting.attackBonusOverride;
+  }
+  if (canEditSheetField('spellcasting.sourceOverrides', access)) {
+    const baseSrc = base.sheetData.spellcasting.sourceOverrides ?? {};
+    const draftSrc = draft.spellcasting.sourceOverrides ?? {};
+    const allClassIds = new Set([...Object.keys(baseSrc), ...Object.keys(draftSrc)]);
+    const srcDiff: Record<string, Dnd5e2014SpellcastingSourceOverride | null> = {};
+    for (const classId of allClassIds) {
+      const normPrev = normalizeSourceOverride(baseSrc[classId]);
+      const normNext = normalizeSourceOverride(draftSrc[classId]);
+      if (!sameNormalizedSourceOverride(normPrev, normNext)) {
+        srcDiff[classId] = normNext;
+      }
+    }
+    if (Object.keys(srcDiff).length > 0) {
+      scPatch.sourceOverrides = srcDiff;
+    }
+  }
+  if (Object.keys(scPatch).length > 0) {
+    sheetPatch.spellcasting = scPatch;
+    changedLabels.push('Conjuració');
+  }
+
+  // 10. Spells
+  if (canEditSheetField('spells', access)) {
+    const sanitizedSpells = sanitizeSpellsForActor(base.sheetData.spells, draft.spells, access);
+    if (!sameSpellsArray(base.sheetData.spells, sanitizedSpells)) {
+      sheetPatch.spells = sanitizedSpells;
+      changedLabels.push('Conjurs');
+    }
+  }
+
+  // 11. Spell slots used & overrides
+  if (canEditSheetField('spellSlotsUsed', access)) {
+    const slotsUsedPatch: Record<string, number> = {};
+    for (const key of SPELL_SLOT_KEYS) {
+      const nextVal = Math.max(0, Math.floor(draft.spellSlotsUsed[key] ?? 0));
+      const prevVal = Math.max(0, Math.floor(base.sheetData.spellSlotsUsed[key] ?? 0));
+      if (nextVal !== prevVal) {
+        slotsUsedPatch[key] = nextVal;
+      }
+    }
+    if (Object.keys(slotsUsedPatch).length > 0) {
+      sheetPatch.spellSlotsUsed = slotsUsedPatch;
+      changedLabels.push('Espais de conjur');
+    }
+  }
+  if (canEditSheetField('spellSlotOverrides', access)) {
+    const slotOverridesPatch: Record<string, number | null> = {};
+    for (const key of SPELL_SLOT_KEYS) {
+      const nextVal = draft.spellSlotOverrides[key] ?? null;
+      const prevVal = base.sheetData.spellSlotOverrides[key] ?? null;
+      if (nextVal !== prevVal) {
+        slotOverridesPatch[key] = nextVal;
+      }
+    }
+    if (Object.keys(slotOverridesPatch).length > 0) {
+      sheetPatch.spellSlotOverrides = slotOverridesPatch;
+      changedLabels.push('Overrides d’espais');
+    }
+  }
+
+  // 12. Resource usage & protected custom resources
+  if (canEditSheetField('resourceUsage', access)) {
+    const resUsagePatch: Record<string, number> = {};
+    const allResKeys = new Set([
+      ...Object.keys(base.sheetData.resourceUsage ?? {}),
+      ...Object.keys(draft.resourceUsage ?? {}),
+    ]);
+    for (const key of allResKeys) {
+      const nextVal = Math.max(0, Math.floor(draft.resourceUsage[key] ?? 0));
+      const prevVal = Math.max(0, Math.floor(base.sheetData.resourceUsage[key] ?? 0));
+      if (nextVal !== prevVal) {
+        resUsagePatch[key] = nextVal;
+      }
+    }
+    if (Object.keys(resUsagePatch).length > 0) {
+      sheetPatch.resourceUsage = resUsagePatch;
+      changedLabels.push('Ús de recursos');
+    }
+  }
+  if (
+    canEditSheetField('customResources', access) &&
+    !sameCustomResourcesArray(base.sheetData.customResources, draft.customResources)
+  ) {
+    sheetPatch.customResources = draft.customResources.map((r) => ({ ...r }));
+    changedLabels.push('Recursos personalitzats');
+  }
+
+  // 13. Traits and features
+  if (
+    canEditSheetField('traitsAndFeatures', access) &&
+    !sameTraitsArray(base.sheetData.traitsAndFeatures, draft.traitsAndFeatures)
+  ) {
+    sheetPatch.traitsAndFeatures = draft.traitsAndFeatures.map((t) => ({ ...t }));
+    changedLabels.push('Trets i aptituds');
+  }
+
+  // 14. Inventory
+  if (canEditSheetField('inventory', access)) {
+    const sanitizedInventory = sanitizeInventoryForActor(base, draft.inventory, access);
+    if (!sameInventoryArray(base.sheetData.inventory, sanitizedInventory)) {
+      sheetPatch.inventory = sanitizedInventory;
+      changedLabels.push('Inventari');
+    }
+  }
+
+  // 15. Attunement limit override (protected)
+  if (
+    canEditSheetField('attunement.limitOverride', access) &&
+    draft.attunement.limitOverride !== (base.sheetData.attunement?.limitOverride ?? null)
+  ) {
+    sheetPatch.attunement = { limitOverride: draft.attunement.limitOverride };
+    changedLabels.push('Límit de sintonització');
+  }
+
+  // 16. Currency
+  const currencyPatch: Record<string, number> = {};
+  for (const coin of ['cp', 'sp', 'ep', 'gp', 'pp'] as const) {
+    if (
+      canEditSheetField(`currency.${coin}`, access) &&
+      draft.currency[coin] !== base.sheetData.currency[coin]
+    ) {
+      currencyPatch[coin] = draft.currency[coin];
+    }
+  }
+  if (Object.keys(currencyPatch).length > 0) {
+    sheetPatch.currency = currencyPatch;
+    changedLabels.push('Monedes');
   }
 
   if (Object.keys(sheetPatch).length > 0) {

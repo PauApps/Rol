@@ -280,10 +280,10 @@ describe('Fase 3 (Increment 3C.1): Pantalla universal de personatge i primera pe
     expect(combatHtml).toContain('Marca arcana del GM');
     expect(combatHtml).toContain('+9');
 
-    const magicPlaceholderHtml = renderToStaticMarkup(
-      React.createElement(TabPlaceholder, { tabId: 'magic' })
+    const storyPlaceholderHtml = renderToStaticMarkup(
+      React.createElement(TabPlaceholder, { tabId: 'story' })
     );
-    expect(magicPlaceholderHtml).toContain('Increment 3C.2');
+    expect(storyPlaceholderHtml).toContain('Increment 3C.3');
   });
 
   it('valida permisos reals en BD: GM edita tot, jugador edita només la seva fitxa i no veu notes del GM', async () => {

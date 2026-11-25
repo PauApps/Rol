@@ -10,6 +10,8 @@ import { CharacterHeader } from './CharacterHeader';
 import { CharacterTabNav } from './CharacterTabNav';
 import { TabPlaceholder } from './TabPlaceholder';
 import { CombatStatsTab } from './combat/CombatStatsTab';
+import { InventoryTab } from './inventory/InventoryTab';
+import { MagicAndAbilitiesTab } from './magic/MagicAndAbilitiesTab';
 import { buildCharacterSheetPatch, createDraftFromCharacter } from './sheet-patch';
 import { buildSheetAccessContext } from './sheet-permissions';
 import type {
@@ -216,6 +218,20 @@ export function CharacterSheetClient({
       {/* Contingut actiu */}
       {activeTab === 'combat' ? (
         <CombatStatsTab
+          character={character}
+          draft={draft}
+          access={access}
+          onUpdateDraft={handleUpdateDraft}
+        />
+      ) : activeTab === 'magic' ? (
+        <MagicAndAbilitiesTab
+          character={character}
+          draft={draft}
+          access={access}
+          onUpdateDraft={handleUpdateDraft}
+        />
+      ) : activeTab === 'inventory' ? (
+        <InventoryTab
           character={character}
           draft={draft}
           access={access}
