@@ -67,7 +67,8 @@ export const DEFAULT_PLAYER_EDITABLE_FIELDS = [
   'generalInfo.size',
   'generalInfo.senses',
   'generalInfo.appearanceNotes',
-  'raceAndClass',
+  'raceAndClass.race',
+  'raceAndClass.subrace',
   'abilities',
   'savingThrows',
   'skills',
@@ -83,7 +84,9 @@ export const DEFAULT_PLAYER_EDITABLE_FIELDS = [
   'spells',
   'spellSlotsUsed',
   'resourceUsage',
-  'progression',
+  'progression.inspiration',
+  'progression.abilityScoreImprovements',
+  'progression.levelHistory',
   'background.backgroundName',
   'background.personalityTraits',
   'background.ideals',
@@ -92,6 +95,18 @@ export const DEFAULT_PLAYER_EDITABLE_FIELDS = [
   'background.backstory',
   'background.sessionNotes',
   'background.additionalNotes',
+] as const;
+
+/**
+ * Complete list of non-override paths that a GM may optionally enable for a player.
+ * Note: `raceAndClass.classes`, `progression.experiencePoints`, and `progression.totalLevel`
+ * are controlled exclusively by the GM by default and only granted to players when explicit.
+ */
+export const GM_GRANTABLE_PLAYER_FIELDS = [
+  ...DEFAULT_PLAYER_EDITABLE_FIELDS,
+  'raceAndClass.classes',
+  'progression.experiencePoints',
+  'progression.totalLevel',
 ] as const;
 
 function normalizeStringArray(value: unknown): string[] | undefined {

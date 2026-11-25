@@ -13,7 +13,7 @@ import {
   type Dnd5e2014ClassEntry,
 } from '@/domain/systems/dnd5e-2014';
 import { Button } from '@/components/ui/Button';
-import { InputField, SelectField } from '@/components/ui/Field';
+import { InputField, SelectField, TextareaField } from '@/components/ui/Field';
 import { Modal } from '@/components/ui/Modal';
 import { canEditSheetField, type SheetAccessContext } from './sheet-permissions';
 import type { CharacterSheetRecord } from './types';
@@ -24,6 +24,7 @@ interface CharacterIdentityConfigModalProps {
   campaignId: string;
   character: CharacterSheetRecord;
   access: SheetAccessContext;
+  members?: ReadonlyArray<{ id: string; displayName: string }>;
   onUpdated: (nextCharacter: CharacterSheetRecord) => void;
 }
 
@@ -33,15 +34,21 @@ export function CharacterIdentityConfigModal({
   campaignId,
   character,
   access,
+  members,
   onUpdated,
 }: CharacterIdentityConfigModalProps) {
   const s = character.sheetData;
 
   const [name, setName] = useState(character.name);
+  const [memberId, setMemberId] = useState(character.memberId ?? '');
   const [playerName, setPlayerName] = useState(s.generalInfo.playerName ?? '');
   const [alignment, setAlignment] = useState(s.generalInfo.alignment ?? '');
   const [size, setSize] = useState(s.generalInfo.size ?? '');
   const [senses, setSenses] = useState(s.generalInfo.senses ?? '');
+  const [speedWalk, setSpeedWalk] = useState(
+    s.speed.walk !== null && s.speed.walk !== undefined ? String(s.speed.walk) : ''
+  );
+  const [appearanceNotes, setAppearanceNotes] = useState(s.generalInfo.appearanceNotes ?? '');
   const [race, setRace] = useState(s.raceAndClass.race ?? '');
   const [subrace, setSubrace] = useState(s.raceAndClass.subrace ?? '');
   const [classes, setClasses] = useState<Dnd5e2014ClassEntry[]>(
@@ -50,6 +57,7 @@ export function CharacterIdentityConfigModal({
       : [{ classId: 'fighter', level: 1 }]
   );
   const [backgroundName, setBackgroundName] = useState(s.background.backgroundName ?? '');
+  const [backstory, setBackstory] = useState(s.background.backstory ?? '');
   const [armorProfs, setArmorProfs] = useState<string[]>(s.proficiencies.armor);
   const [weaponProfs, setWeaponProfs] = useState<string[]>(s.proficiencies.weapons);
   const [toolProfs, setToolProfs] = useState<string[]>(s.proficiencies.tools);
@@ -64,10 +72,13 @@ export function CharacterIdentityConfigModal({
   const canEditAlignment = canEditSheetField('generalInfo.alignment', access);
   const canEditSize = canEditSheetField('generalInfo.size', access);
   const canEditSenses = canEditSheetField('generalInfo.senses', access);
+  const canEditSpeed = canEditSheetField('speed.walk', access);
+  const canEditAppearance = canEditSheetField('generalInfo.appearanceNotes', access);
   const canEditRace = canEditSheetField('raceAndClass.race', access);
   const canEditSubrace = canEditSheetField('raceAndClass.subrace', access);
   const canEditClasses = canEditSheetField('raceAndClass.classes', access);
   const canEditBackground = canEditSheetField('background.backgroundName', access);
+  const canEditBackstory = canEditSheetField('background.backstory', access);
   const canEditProfs = canEditSheetField('proficiencies', access);
 
   const totalClassLevel = classes.reduce((sum, c) => sum + c.level, 0);
@@ -113,6 +124,10 @@ export function CharacterIdentityConfigModal({
       payload.name = cleanName;
     }
 
+    if (access.isGm && (memberId || null) !== character.memberId) {
+      payload.memberId = memberId || null;
+    }
+
     const generalInfoPatch: Record<string, unknown> = {};
     if (canEditPlayerName && (playerName.trim() || null) !== s.generalInfo.playerName) {
       generalInfoPatch.playerName = playerName.trim() || null;
@@ -126,8 +141,27 @@ export function CharacterIdentityConfigModal({
     if (canEditSenses && (senses.trim() || null) !== s.generalInfo.senses) {
       generalInfoPatch.senses = senses.trim() || null;
     }
+    if (canEditAppearance && appearanceNotes.trim() !== s.generalInfo.appearanceNotes) {
+      generalInfoPatch.appearanceNotes = appearanceNotes.trim();
+    }
     if (Object.keys(generalInfoPatch).length > 0) {
       sheetPatch.generalInfo = generalInfoPatch;
+    }
+
+    if (canEditSpeed) {
+      const trimmedSpeed = speedWalk.trim();
+      let parsedWalk: number | null = null;
+      if (trimmedSpeed !== '') {
+        const num = Number(trimmedSpeed);
+        if (!Number.isInteger(num) || num < 0 || num > 1000) {
+          setError('La velocitat a peu ha de ser un enter en metres entre 0 i 1000.');
+          return;
+        }
+        parsedWalk = num;
+      }
+      if (parsedWalk !== s.speed.walk) {
+        sheetPatch.speed = { walk: parsedWalk };
+      }
     }
 
     const raceAndClassPatch: Record<string, unknown> = {};
@@ -144,8 +178,15 @@ export function CharacterIdentityConfigModal({
       sheetPatch.raceAndClass = raceAndClassPatch;
     }
 
+    const backgroundPatch: Record<string, unknown> = {};
     if (canEditBackground && (backgroundName.trim() || null) !== s.background.backgroundName) {
-      sheetPatch.background = { backgroundName: backgroundName.trim() || null };
+      backgroundPatch.backgroundName = backgroundName.trim() || null;
+    }
+    if (canEditBackstory && backstory.trim() !== s.background.backstory) {
+      backgroundPatch.backstory = backstory.trim();
+    }
+    if (Object.keys(backgroundPatch).length > 0) {
+      sheetPatch.background = backgroundPatch;
     }
 
     if (canEditProfs) {
@@ -193,8 +234,8 @@ export function CharacterIdentityConfigModal({
     <Modal
       open={open}
       onClose={onClose}
-      title={`Configuració de personatge · ${character.name}`}
-      description="Edita identitat, raça, classes, nivells, trasfons i competències respectant les regles de la campanya."
+      title={`Editar personatge · ${character.name}`}
+      description="Edita identitat, raça, classes, nivells, velocitat, trasfons, descripció, història i competències respectant les regles de la campanya."
     >
       <form onSubmit={handleSubmit} className="space-y-4 max-h-[75vh] overflow-y-auto pr-1">
         <div className="grid gap-3 sm:grid-cols-2">
@@ -213,6 +254,22 @@ export function CharacterIdentityConfigModal({
             onChange={(e) => setPlayerName(e.target.value)}
           />
         </div>
+
+        {access.isGm && members && members.length > 0 && (
+          <SelectField
+            label="Assignat a (jugador de campanya)"
+            htmlFor="cfg-member-owner"
+            value={memberId}
+            onChange={(e) => setMemberId(e.target.value)}
+          >
+            <option value="">Sense jugador (Personatge del GM)</option>
+            {members.map((m) => (
+              <option key={m.id} value={m.id}>
+                {m.displayName}
+              </option>
+            ))}
+          </SelectField>
+        )}
 
         <div className="grid gap-3 sm:grid-cols-2">
           <div>
@@ -272,20 +329,54 @@ export function CharacterIdentityConfigModal({
           />
         </div>
 
-        <div>
+        <div className="grid gap-3 sm:grid-cols-2">
+          <div>
+            <InputField
+              label="Antecedent / Trasfons"
+              htmlFor="cfg-background"
+              list="cfg-bg-datalist"
+              disabled={!canEditBackground}
+              value={backgroundName}
+              onChange={(e) => setBackgroundName(e.target.value)}
+            />
+            <datalist id="cfg-bg-datalist">
+              {DND5E_BACKGROUNDS.map((b) => (
+                <option key={b.id} value={b.labelCa} />
+              ))}
+            </datalist>
+          </div>
           <InputField
-            label="Antecedent / Trasfons"
-            htmlFor="cfg-background"
-            list="cfg-bg-datalist"
-            disabled={!canEditBackground}
-            value={backgroundName}
-            onChange={(e) => setBackgroundName(e.target.value)}
+            label="Velocitat a peu (metres)"
+            htmlFor="cfg-speed-walk"
+            type="number"
+            min={0}
+            max={1000}
+            disabled={!canEditSpeed}
+            value={speedWalk}
+            onChange={(e) => setSpeedWalk(e.target.value)}
+            placeholder="9"
           />
-          <datalist id="cfg-bg-datalist">
-            {DND5E_BACKGROUNDS.map((b) => (
-              <option key={b.id} value={b.labelCa} />
-            ))}
-          </datalist>
+        </div>
+
+        <div className="grid gap-3 sm:grid-cols-2">
+          <TextareaField
+            label="Descripció i aspecte"
+            htmlFor="cfg-appearance"
+            rows={2}
+            disabled={!canEditAppearance}
+            value={appearanceNotes}
+            onChange={(e) => setAppearanceNotes(e.target.value)}
+            placeholder="Trets físics, vestimenta, edat…"
+          />
+          <TextareaField
+            label="Història personal"
+            htmlFor="cfg-backstory"
+            rows={2}
+            disabled={!canEditBackstory}
+            value={backstory}
+            onChange={(e) => setBackstory(e.target.value)}
+            placeholder="Orígens, motivacions o esdeveniments clau…"
+          />
         </div>
 
         {/* Classes i nivells (multiclasse) */}

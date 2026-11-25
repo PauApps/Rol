@@ -19,6 +19,7 @@ import type { RollMode } from './dice';
 import {
   ATTACK_ENTRY_KINDS,
   HIT_DIE_KEYS,
+  SESSION_NOTE_CATEGORIES,
   createEmptyDnd5e2014Sheet,
   hitDieSizeToKey,
   inferHitDiceUsedByDieFromClasses,
@@ -307,6 +308,8 @@ export const dnd5e2014SessionNoteSchema = z
   .object({
     id: z.string().trim().min(1).max(80),
     date: z.string().max(40).default(''),
+    updatedAt: nullableTrimmedString(40).optional().default(null),
+    category: z.enum(SESSION_NOTE_CATEGORIES).nullable().optional().default(null),
     title: z.string().trim().min(1, 'El títol de la nota és obligatori.').max(160),
     content: z.string().max(8000).default(''),
   })

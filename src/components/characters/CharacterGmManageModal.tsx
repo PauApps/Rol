@@ -3,6 +3,7 @@
 import { useState, type FormEvent } from 'react';
 import {
   DEFAULT_PLAYER_EDITABLE_FIELDS,
+  GM_GRANTABLE_PLAYER_FIELDS,
   PROTECTED_OFFICIAL_CALCULATION_PATHS,
 } from '@/domain/systems/dnd5e-2014';
 import { Button } from '@/components/ui/Button';
@@ -27,7 +28,9 @@ const SECTION_LABELS: Record<string, string> = {
   'generalInfo.size': 'Mida',
   'generalInfo.senses': 'Sentits',
   'generalInfo.appearanceNotes': 'Aspecte físic',
-  raceAndClass: 'Raça i classe',
+  'raceAndClass.race': 'Raça',
+  'raceAndClass.subrace': 'Subraça',
+  'raceAndClass.classes': 'Classes i nivells (pujada de nivell)',
   abilities: 'Característiques',
   savingThrows: 'Salvacions',
   skills: 'Habilitats',
@@ -43,7 +46,11 @@ const SECTION_LABELS: Record<string, string> = {
   spells: 'Conjurs',
   spellSlotsUsed: 'Espais de conjur gastats',
   resourceUsage: 'Ús de recursos',
-  progression: 'Progressió',
+  'progression.experiencePoints': 'Punts d’experiència (PE)',
+  'progression.totalLevel': 'Nivell total',
+  'progression.inspiration': 'Inspiració',
+  'progression.abilityScoreImprovements': 'Notes de millores (ASI/Dots)',
+  'progression.levelHistory': 'Historial de nivells',
   'background.backgroundName': 'Nom del rerefons',
   'background.personalityTraits': 'Trets de personalitat',
   'background.ideals': 'Ideals',
@@ -153,7 +160,7 @@ export function CharacterGmManageModal({
             Seccions editables pel jugador propietari
           </p>
           <div className="grid grid-cols-1 gap-1.5 max-h-40 overflow-y-auto rounded-[var(--rol-radius-md)] border border-[var(--rol-border-subtle)] bg-[var(--rol-bg-surface-alt)]/40 p-2.5 text-xs sm:grid-cols-2">
-            {DEFAULT_PLAYER_EDITABLE_FIELDS.map((fieldPath) => {
+            {GM_GRANTABLE_PLAYER_FIELDS.map((fieldPath) => {
               const checked = playerEditableFields.includes(fieldPath);
               const blockedByGmOnly = gmOnlyFields.includes(fieldPath);
               return (
@@ -219,6 +226,7 @@ export function CharacterGmManageModal({
                 ['skills', 'Habilitats'],
                 ['hitPoints', 'Punts de cop'],
                 ['attacks', 'Atacs'],
+                ['background.sessionNotes', 'Diari de sessions'],
                 ['background.additionalNotes', 'Notes addicionals'],
               ] as const
             ).map(([path, label]) => (

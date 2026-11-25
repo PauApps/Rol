@@ -9,10 +9,12 @@ import { CharacterGmManageModal } from './CharacterGmManageModal';
 import { CharacterHeader } from './CharacterHeader';
 import { CharacterIdentityConfigModal } from './CharacterIdentityConfigModal';
 import { CharacterTabNav } from './CharacterTabNav';
-import { TabPlaceholder } from './TabPlaceholder';
+import { DeleteCharacterModal } from './DeleteCharacterModal';
 import { CombatStatsTab } from './combat/CombatStatsTab';
 import { InventoryTab } from './inventory/InventoryTab';
 import { MagicAndAbilitiesTab } from './magic/MagicAndAbilitiesTab';
+import { ProgressionAndEvolutionTab } from './progression/ProgressionAndEvolutionTab';
+import { StoryAndJournalTab } from './story/StoryAndJournalTab';
 import { buildCharacterSheetPatch, createDraftFromCharacter } from './sheet-patch';
 import { buildSheetAccessContext } from './sheet-permissions';
 import type {
@@ -25,11 +27,13 @@ import type {
 interface CharacterSheetClientProps {
   campaign: CharacterCampaignContext;
   initialCharacter: CharacterSheetRecord;
+  initialOpenEditModal?: boolean;
 }
 
 export function CharacterSheetClient({
   campaign,
   initialCharacter,
+  initialOpenEditModal = false,
 }: CharacterSheetClientProps) {
   const router = useRouter();
   const [character, setCharacter] = useState<CharacterSheetRecord>(initialCharacter);
@@ -42,7 +46,10 @@ export function CharacterSheetClient({
   const [saveSuccess, setSaveSuccess] = useState<string | null>(null);
   const [warnings, setWarnings] = useState<string[]>([]);
   const [gmModalOpen, setGmModalOpen] = useState(false);
-  const [identityModalOpen, setIdentityModalOpen] = useState(false);
+  const [identityModalOpen, setIdentityModalOpen] = useState(
+    Boolean(initialOpenEditModal && initialCharacter.canEdit)
+  );
+  const [deleteModalOpen, setDeleteModalOpen] = useState(false);
   const inFlightRef = useRef(false);
 
   const access = useMemo(
@@ -145,6 +152,7 @@ export function CharacterSheetClient({
         }
         onOpenGmManage={campaign.canManage ? () => setGmModalOpen(true) : undefined}
         onOpenIdentityConfig={access.canEdit ? () => setIdentityModalOpen(true) : undefined}
+        onOpenDelete={access.canEdit ? () => setDeleteModalOpen(true) : undefined}
       />
 
       {/* Barra d'estat i desament explícit */}
@@ -240,8 +248,32 @@ export function CharacterSheetClient({
           access={access}
           onUpdateDraft={handleUpdateDraft}
         />
+      ) : activeTab === 'story' ? (
+        <StoryAndJournalTab
+          character={character}
+          draft={draft}
+          access={access}
+          onUpdateDraft={handleUpdateDraft}
+        />
       ) : (
-        <TabPlaceholder tabId={activeTab} />
+        <ProgressionAndEvolutionTab
+          campaignId={campaign.id}
+          character={character}
+          draft={draft}
+          access={access}
+          hasUnsavedChanges={builtPatch.hasChanges}
+          onUpdateDraft={handleUpdateDraft}
+          onLevelUpApplied={(nextCharacter, nextWarnings) => {
+            setCharacter(nextCharacter);
+            setDraft(createDraftFromCharacter(nextCharacter));
+            setWarnings(nextWarnings);
+            setSaveError(null);
+            setSaveSuccess(
+              `Pujada de nivell aplicada: nivell total ${nextCharacter.computed.totalLevel}.`
+            );
+            router.refresh();
+          }}
+        />
       )}
 
       {/* Modal exclusiu de Director de Joc */}
@@ -265,12 +297,29 @@ export function CharacterSheetClient({
           campaignId={campaign.id}
           character={character}
           access={access}
+          members={campaign.members}
           onUpdated={(nextCharacter) => {
             setCharacter(nextCharacter);
             if (!builtPatch.hasChanges) {
               setDraft(createDraftFromCharacter(nextCharacter));
             }
             setSaveSuccess('Configuració de personatge actualitzada.');
+            router.refresh();
+          }}
+        />
+      )}
+
+      {/* Modal d'eliminació definitiva amb doble confirmació */}
+      {access.canEdit && (
+        <DeleteCharacterModal
+          key={`del-${character.id}-${deleteModalOpen}`}
+          open={deleteModalOpen}
+          onClose={() => setDeleteModalOpen(false)}
+          campaignId={campaign.id}
+          characterId={character.id}
+          characterName={character.name}
+          onDeleted={() => {
+            router.push(`/campaigns/${campaign.id}`);
             router.refresh();
           }}
         />

@@ -7,11 +7,11 @@ import {
   Footprints,
   Heart,
   Pencil,
-  Settings2,
   Shield,
   SlidersHorizontal,
   Sparkles,
   Swords,
+  Trash2,
   X,
   Zap,
 } from 'lucide-react';
@@ -35,6 +35,7 @@ interface CharacterHeaderProps {
   onChangeName: (nextName: string) => void;
   onOpenGmManage?: () => void;
   onOpenIdentityConfig?: () => void;
+  onOpenDelete?: () => void;
 }
 
 export function CharacterHeader({
@@ -45,6 +46,7 @@ export function CharacterHeader({
   onChangeName,
   onOpenGmManage,
   onOpenIdentityConfig,
+  onOpenDelete,
 }: CharacterHeaderProps) {
   const [editingName, setEditingName] = useState(false);
   const [tempName, setTempName] = useState(draftName);
@@ -207,14 +209,20 @@ export function CharacterHeader({
           <div className="flex flex-wrap gap-2">
             {access.canEdit && onOpenIdentityConfig && (
               <Button size="sm" variant="secondary" onClick={onOpenIdentityConfig}>
-                <Settings2 className="h-3.5 w-3.5" />
-                Identitat i classes
+                <Pencil className="h-3.5 w-3.5" />
+                Editar personatge
               </Button>
             )}
             {campaign.canManage && onOpenGmManage && (
               <Button size="sm" variant="secondary" onClick={onOpenGmManage}>
                 <SlidersHorizontal className="h-3.5 w-3.5" />
                 Gestió GM
+              </Button>
+            )}
+            {access.canEdit && onOpenDelete && (
+              <Button size="sm" variant="danger" onClick={onOpenDelete}>
+                <Trash2 className="h-3.5 w-3.5" />
+                Eliminar
               </Button>
             )}
           </div>

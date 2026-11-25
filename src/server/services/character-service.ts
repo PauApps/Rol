@@ -17,6 +17,7 @@ import {
   normalizeDnd5e2014Sheet,
   normalizeFieldPermissions,
   validateCharacterAgainstCampaignConfig,
+  validateMulticlassPrerequisites,
   type CharacterFieldPermissions,
   type Dnd5e2014SheetData,
   type Dnd5e2014SheetPatchInput,
@@ -726,6 +727,27 @@ export async function updateCharacterBase(
       { violations: creationValidation.violations }
     );
   }
+  const extraWarnings: string[] = [...creationValidation.warnings];
+  if (
+    parsedSheetPatch?.raceAndClass?.classes !== undefined &&
+    validatedSheet.raceAndClass.classes.length >= 2
+  ) {
+    const mcCheck = validateMulticlassPrerequisites(
+      validatedSheet.raceAndClass.classes,
+      validatedSheet.abilities
+    );
+    if (!mcCheck.eligible) {
+      if (!isGm) {
+        throw badRequest(
+          'MULTICLASS_PREREQUISITES_NOT_MET',
+          mcCheck.unmetRequirements[0] ??
+            'No compleixes els requisits oficials de multiclasse de D&D 5e (2014).',
+          { unmetRequirements: mcCheck.unmetRequirements }
+        );
+      }
+      extraWarnings.push(...mcCheck.unmetRequirements);
+    }
+  }
   if (parsedSheetPatch?.spells !== undefined) {
     assertPlayerPreparedSpellLimits(validatedSheet, isGm);
   }
@@ -817,6 +839,71 @@ export async function updateCharacterBase(
   const updatedCharacter = await getCampaignCharacter(db, ctx, campaignId, existing.id);
   return {
     ...updatedCharacter,
-    warnings: creationValidation.warnings,
+    warnings: extraWarnings,
+  };
+}
+
+/**
+ * Permanently deletes a character from a campaign.
+ * - Allowed for the campaign GM or the active owner member (`existing.memberId === access.member?.id`).
+ * - Enforces explicit server-side double confirmation by matching `confirmName` with `existing.name`.
+ */
+export async function deleteCampaignCharacter(
+  db: AppDatabase,
+  ctx: AuthContext | null,
+  campaignId: string,
+  characterId: string,
+  confirmName: string
+) {
+  const access = await assertCampaignAccess(db, ctx, campaignId);
+
+  const [existing] = await db
+    .select({
+      id: characters.id,
+      name: characters.name,
+      memberId: characters.memberId,
+    })
+    .from(characters)
+    .where(and(eq(characters.id, characterId), eq(characters.campaignId, access.campaign.id)))
+    .limit(1);
+
+  if (!existing) {
+    throw notFound('CHARACTER_NOT_FOUND', 'Personatge no trobat dins d’aquesta campanya.');
+  }
+
+  const isGm = access.accessRole === 'gm';
+  const isOwner = existing.memberId !== null && existing.memberId === access.member?.id;
+  if (!isGm && !isOwner) {
+    throw forbidden(
+      'CHARACTER_DELETE_FORBIDDEN',
+      'Només el Director de Joc o el propietari del personatge el poden eliminar.'
+    );
+  }
+
+  if (confirmName.trim() !== existing.name.trim()) {
+    throw badRequest(
+      'INVALID_DELETE_CONFIRMATION',
+      'Cal escriure el nom exacte del personatge per confirmar-ne l’eliminació definitiva.'
+    );
+  }
+
+  await db
+    .delete(characters)
+    .where(and(eq(characters.id, existing.id), eq(characters.campaignId, access.campaign.id)));
+
+  await recordAuditLog(db, {
+    actorUserId: ctx?.kind === 'user' ? ctx.user.id : null,
+    actorMemberId: ctx?.kind === 'guest' ? ctx.member.id : null,
+    campaignId: access.campaign.id,
+    action: 'character.deleted',
+    targetType: 'character',
+    targetId: existing.id,
+    metadata: { name: existing.name, memberId: existing.memberId },
+  });
+
+  return {
+    deleted: true as const,
+    id: existing.id,
+    name: existing.name,
   };
 }

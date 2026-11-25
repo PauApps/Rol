@@ -3,10 +3,13 @@ import type {
   ArmorType,
   ComputedDnd5e2014Snapshot,
   Dnd5e2014AbilityScores,
+  Dnd5e2014AsiEntry,
   Dnd5e2014AttackEntry,
   Dnd5e2014CustomResource,
   Dnd5e2014HitDiceUsedByDie,
   Dnd5e2014InventoryItem,
+  Dnd5e2014LevelHistoryEntry,
+  Dnd5e2014SessionNote,
   Dnd5e2014SheetData,
   Dnd5e2014SpellEntry,
   Dnd5e2014SpellcastingSourceOverride,
@@ -52,13 +55,13 @@ export const CHARACTER_TABS: readonly CharacterTabDefinition[] = [
     id: 'story',
     label: 'Història i diari',
     shortLabel: 'Història',
-    plannedIncrement: 'Increment 3C.3',
+    plannedIncrement: null,
   },
   {
     id: 'progression',
     label: 'Progressió i evolució',
     shortLabel: 'Progressió',
-    plannedIncrement: 'Increment 3C.3',
+    plannedIncrement: null,
   },
 ] as const;
 
@@ -131,6 +134,7 @@ export interface CharacterCampaignContext {
   virtualDiceEnabled: boolean;
   canManage: boolean;
   accessRole: 'gm' | 'player' | 'guest';
+  members?: ReadonlyArray<{ id: string; displayName: string }>;
 }
 
 export interface CharacterSheetDraft {
@@ -199,6 +203,30 @@ export interface CharacterSheetDraft {
     ep: number;
     gp: number;
     pp: number;
+  };
+  generalInfo: {
+    alignment: string | null;
+    faith: string | null;
+    age: string | null;
+    size: string | null;
+    senses: string | null;
+    appearanceNotes: string;
+  };
+  background: {
+    backgroundName: string | null;
+    personalityTraits: string;
+    ideals: string;
+    bonds: string;
+    flaws: string;
+    backstory: string;
+    sessionNotes: Dnd5e2014SessionNote[];
+    additionalNotes: string;
+  };
+  progression: {
+    experiencePoints: number;
+    inspiration: boolean;
+    abilityScoreImprovements: Dnd5e2014AsiEntry[];
+    levelHistory: Dnd5e2014LevelHistoryEntry[];
   };
 }
 

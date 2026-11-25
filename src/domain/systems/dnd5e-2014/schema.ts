@@ -145,9 +145,33 @@ export interface Dnd5e2014CustomResource {
   description: string;
 }
 
+export const SESSION_NOTE_CATEGORIES = [
+  'event',
+  'npc',
+  'location',
+  'quest',
+  'goal',
+  'memory',
+  'note',
+] as const;
+
+export type SessionNoteCategory = (typeof SESSION_NOTE_CATEGORIES)[number];
+
+export const SESSION_NOTE_CATEGORY_LABELS_CA: Record<SessionNoteCategory, string> = {
+  event: 'Esdeveniments',
+  npc: 'Personatges coneguts',
+  location: 'Llocs descoberts',
+  quest: 'Missions',
+  goal: 'Objectius',
+  memory: 'Records',
+  note: 'Notes lliures',
+};
+
 export interface Dnd5e2014SessionNote {
   id: string;
   date: string;
+  updatedAt?: string | null;
+  category?: SessionNoteCategory | null;
   title: string;
   content: string;
 }
@@ -466,6 +490,7 @@ const VALID_SPELL_SOURCE_SET = new Set<string>([
 
 const VALID_ATTACK_KIND_SET = new Set<string>(ATTACK_ENTRY_KINDS);
 const VALID_HIT_DIE_KEY_SET = new Set<string>(HIT_DIE_KEYS);
+const VALID_SESSION_NOTE_CATEGORY_SET = new Set<string>(SESSION_NOTE_CATEGORIES);
 
 export function sumHitDiceUsedByDie(
   byDie: Dnd5e2014HitDiceUsedByDie | null | undefined
@@ -993,9 +1018,15 @@ export function normalizeDnd5e2014Sheet(raw: unknown, fallbackName: string): Dnd
     sessionNotes: Array.isArray(bg.sessionNotes)
       ? bg.sessionNotes.map((rawNote, idx) => {
           const n = asObj(rawNote);
+          const rawCategory = typeof n.category === 'string' ? n.category : null;
           return {
             id: asStr(n.id, `session-${idx + 1}`),
             date: asStr(n.date),
+            updatedAt: asNullableStr(n.updatedAt),
+            category:
+              rawCategory && VALID_SESSION_NOTE_CATEGORY_SET.has(rawCategory)
+                ? (rawCategory as SessionNoteCategory)
+                : null,
             title: asStr(n.title),
             content: asStr(n.content),
           };

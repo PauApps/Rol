@@ -1,7 +1,9 @@
 import React from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
+import { and, eq } from 'drizzle-orm';
 import { createTestDb } from '@/db';
+import { auditLogs } from '@/db/schema';
 import { DEFAULT_CAMPAIGN_CREATION_CONFIG, type CampaignCreationConfig } from '@/domain/campaigns/creation-config';
 import {
   DND5E_CLASSES,
@@ -16,10 +18,12 @@ import {
 import { resolveSession } from '@/server/auth/session';
 import {
   createCampaign,
+  getCampaignDetail,
   updateCampaignCharacterRules,
 } from '@/server/services/campaign-service';
 import {
   createCharacterBase,
+  deleteCampaignCharacter,
   getCampaignCharacter,
   listCampaignCharacters,
   updateCharacterBase,
@@ -28,7 +32,9 @@ import {
   acceptPlayerInvitation,
   createPlayerInvitation,
 } from '@/server/services/player-invitation-service';
+import { CharacterHeader } from '@/components/characters/CharacterHeader';
 import { CharacterIdentityConfigModal } from '@/components/characters/CharacterIdentityConfigModal';
+import { DeleteCharacterModal } from '@/components/characters/DeleteCharacterModal';
 import { InventoryTab } from '@/components/characters/inventory/InventoryTab';
 import { MagicAndAbilitiesTab } from '@/components/characters/magic/MagicAndAbilitiesTab';
 import { StepAbilities } from '@/components/characters/creation/StepAbilities';
@@ -438,6 +444,215 @@ describe('Fase 3 (Increment 3C.2.1): Creació guiada i configuració editable de
       const reloaded = await getCampaignCharacter(db, playerCtx, camp.id, created.id);
       expect((reloaded.sheetData.generalInfo as { alignment: string | null }).alignment).toBe('Legal Bo');
       expect(reloaded.computed.combat.armorClass.value).toBe(16); // sense escut
+    } finally {
+      await close();
+    }
+  });
+
+  it('permet eliminar personatges amb doble confirmació al servidor i editar camps complets des de la fitxa', async () => {
+    const { db, close } = await createTestDb();
+    try {
+      const admin = await bootstrapAdmin(db);
+      const gm = await createInvitedGm(db, admin.ctx, 'gm.delete@rol.test', 'GM Delete');
+      const otherGm = await createInvitedGm(db, admin.ctx, 'othergm.delete@rol.test', 'Other GM');
+
+      const camp = await createCampaign(db, gm.ctx, {
+        name: 'Campanya Edició i Eliminació',
+        systemId: 'dnd5e-2014',
+      });
+      await updateCampaignCharacterRules(db, gm.ctx, camp.id, {
+        maxCharactersPerPlayer: 1,
+      });
+      const otherCamp = await createCampaign(db, otherGm.ctx, {
+        name: 'Campanya Aliena',
+        systemId: 'dnd5e-2014',
+      });
+
+      const invA = await createPlayerInvitation(db, gm.ctx, camp.id, { label: 'Jugador A' });
+      const regA = await acceptPlayerInvitation(db, invA.rawToken, {
+        mode: 'register',
+        email: 'playerA.del@rol.test',
+        displayName: 'Jugador A',
+        password: 'Password123!',
+      });
+      const playerACtx = await resolveSession(db, regA.rawToken);
+
+      const invB = await createPlayerInvitation(db, gm.ctx, camp.id, { label: 'Jugador B' });
+      const regB = await acceptPlayerInvitation(db, invB.rawToken, {
+        mode: 'register',
+        email: 'playerB.del@rol.test',
+        displayName: 'Jugador B',
+        password: 'Password123!',
+      });
+      const playerBCtx = await resolveSession(db, regB.rawToken);
+
+      const detail = await getCampaignDetail(db, gm.ctx, camp.id);
+      const memberB = (detail.canManage ? detail.members : []).find(
+        (m) => m.displayName === 'Jugador B'
+      )!;
+
+      const charA = await createCharacterBase(db, playerACtx, camp.id, {
+        name: 'Theron',
+      });
+      const charB = await createCharacterBase(db, gm.ctx, camp.id, {
+        name: 'Kaelen',
+        memberId: memberB.id,
+      });
+
+      // Edició completa (nom, aspecte, història, velocitat) des del jugador propietari
+      const updatedA = await updateCharacterBase(db, playerACtx, camp.id, charA.id, {
+        name: 'Theron Renovellat',
+        sheetPatch: {
+          generalInfo: { name: 'Theron Renovellat', appearanceNotes: 'Capa vermella i cicatriu' },
+          background: { backstory: 'Antic explorador de les muntanyes.' },
+          speed: { walk: 10 },
+        },
+      });
+      expect(updatedA.name).toBe('Theron Renovellat');
+      expect((updatedA.sheetData.generalInfo as { appearanceNotes: string }).appearanceNotes).toBe(
+        'Capa vermella i cicatriu'
+      );
+      expect((updatedA.sheetData.background as { backstory: string }).backstory).toBe(
+        'Antic explorador de les muntanyes.'
+      );
+      expect((updatedA.sheetData.speed as { walk: number | null }).walk).toBe(10);
+
+      // Reassignació de titularitat exclusiva del GM
+      const reassignedB = await updateCharacterBase(db, gm.ctx, camp.id, charB.id, {
+        memberId: null,
+      });
+      expect(reassignedB.memberId).toBeNull();
+
+      // SSR dels components d'edició i eliminació en doble confirmació
+      const noop = () => undefined;
+      const recordA = {
+        ...updatedA,
+        createdAt: updatedA.createdAt.toISOString(),
+        updatedAt: updatedA.updatedAt.toISOString(),
+      } as unknown as CharacterSheetRecord;
+      const accessOwner = buildSheetAccessContext(recordA, false);
+      const accessReadOnly = buildSheetAccessContext({ ...recordA, canEdit: false }, false);
+      const accessGm = buildSheetAccessContext({ ...recordA, canEdit: true }, true);
+
+      expect(
+        renderToStaticMarkup(
+          React.createElement(DeleteCharacterModal, {
+            open: true,
+            onClose: noop,
+            campaignId: camp.id,
+            characterId: charA.id,
+            characterName: 'Theron Renovellat',
+            onDeleted: noop,
+          })
+        )
+      ).toContain('Continuar per eliminar');
+
+      expect(
+        renderToStaticMarkup(
+          React.createElement(CharacterIdentityConfigModal, {
+            open: true,
+            onClose: noop,
+            campaignId: camp.id,
+            character: recordA,
+            access: accessGm,
+            members: [{ id: memberB.id, displayName: 'Jugador B' }],
+            onUpdated: noop,
+          })
+        )
+      ).toContain('Assignat a (jugador de campanya)');
+
+      const headerOwnerHtml = renderToStaticMarkup(
+        React.createElement(CharacterHeader, {
+          character: recordA,
+          campaign: {
+            id: camp.id,
+            name: camp.name,
+            systemId: 'dnd5e-2014',
+            systemName: 'D&D 5e',
+            virtualDiceEnabled: false,
+            canManage: false,
+            accessRole: 'player',
+          },
+          access: accessOwner,
+          draftName: recordA.name,
+          onChangeName: noop,
+          onOpenIdentityConfig: noop,
+          onOpenDelete: noop,
+        })
+      );
+      expect(headerOwnerHtml).toContain('Editar personatge');
+      expect(headerOwnerHtml).toContain('Eliminar');
+
+      const headerReadOnlyHtml = renderToStaticMarkup(
+        React.createElement(CharacterHeader, {
+          character: { ...recordA, canEdit: false },
+          campaign: {
+            id: camp.id,
+            name: camp.name,
+            systemId: 'dnd5e-2014',
+            systemName: 'D&D 5e',
+            virtualDiceEnabled: false,
+            canManage: false,
+            accessRole: 'player',
+          },
+          access: accessReadOnly,
+          draftName: recordA.name,
+          onChangeName: noop,
+          onOpenIdentityConfig: noop,
+          onOpenDelete: noop,
+        })
+      );
+      expect(headerReadOnlyHtml).not.toContain('Editar personatge');
+      expect(headerReadOnlyHtml).not.toContain('Eliminar');
+
+      // Seguretat d'eliminació:
+      // 1) Altra campanya / GM aliè -> 403 CAMPAIGN_FORBIDDEN
+      await expect(
+        deleteCampaignCharacter(db, otherGm.ctx, camp.id, charA.id, 'Theron Renovellat')
+      ).rejects.toMatchObject({ status: 403, code: 'CAMPAIGN_FORBIDDEN' });
+      await expect(
+        deleteCampaignCharacter(db, gm.ctx, otherCamp.id, charA.id, 'Theron Renovellat')
+      ).rejects.toMatchObject({ status: 403, code: 'CAMPAIGN_FORBIDDEN' });
+
+      // 2) Un altre jugador de la mateixa campanya -> 403 CHARACTER_DELETE_FORBIDDEN
+      await expect(
+        deleteCampaignCharacter(db, playerBCtx, camp.id, charA.id, 'Theron Renovellat')
+      ).rejects.toMatchObject({ status: 403, code: 'CHARACTER_DELETE_FORBIDDEN' });
+
+      // 3) Nom de confirmació erroni -> 400 INVALID_DELETE_CONFIRMATION i el personatge continua existint
+      await expect(
+        deleteCampaignCharacter(db, playerACtx, camp.id, charA.id, 'Nom Incorrecte')
+      ).rejects.toMatchObject({ status: 400, code: 'INVALID_DELETE_CONFIRMATION' });
+
+      // 4) El propietari elimina amb confirmació exacta i recupera la plaça del límit (1/1)
+      const deletedA = await deleteCampaignCharacter(
+        db,
+        playerACtx,
+        camp.id,
+        charA.id,
+        'Theron Renovellat'
+      );
+      expect(deletedA).toEqual({
+        deleted: true,
+        id: charA.id,
+        name: 'Theron Renovellat',
+      });
+      await expect(
+        getCampaignCharacter(db, playerACtx, camp.id, charA.id)
+      ).rejects.toMatchObject({ status: 404, code: 'CHARACTER_NOT_FOUND' });
+
+      const recreated = await createCharacterBase(db, playerACtx, camp.id, {
+        name: 'Theron II',
+      });
+      expect(recreated.name).toBe('Theron II');
+
+      // 5) El GM elimina qualsevol personatge i es registra a auditLogs
+      await deleteCampaignCharacter(db, gm.ctx, camp.id, charB.id, 'Kaelen');
+      const [delAudit] = await db
+        .select({ action: auditLogs.action, targetId: auditLogs.targetId })
+        .from(auditLogs)
+        .where(and(eq(auditLogs.campaignId, camp.id), eq(auditLogs.action, 'character.deleted')));
+      expect(delAudit).toBeDefined();
     } finally {
       await close();
     }

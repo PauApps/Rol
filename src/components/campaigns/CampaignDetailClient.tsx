@@ -8,6 +8,7 @@ import {
   Eye,
   KeyRound,
   Link2,
+  Pencil,
   Plus,
   ShieldBan,
   SlidersHorizontal,
@@ -25,6 +26,7 @@ import { Modal } from '@/components/ui/Modal';
 import { CampaignStatusBadge, MemberStatusBadge } from '@/components/ui/StatusBadge';
 import { CampaignCreationConfigCard } from './CampaignCreationConfigCard';
 import { GuestLinkAccountModal } from './GuestLinkAccountModal';
+import { DeleteCharacterModal } from '@/components/characters/DeleteCharacterModal';
 import type { CampaignCreationConfig } from '@/domain/campaigns/creation-config';
 import type { CampaignStatus, MemberStatus, MemberType, PlayerInvitationKind } from '@/db/schema';
 
@@ -153,6 +155,8 @@ export function CampaignDetailClient({
   const [newCharMemberId, setNewCharMemberId] = useState<string>('');
   const [creatingChar, setCreatingChar] = useState(false);
   const [charError, setCharError] = useState<string | null>(null);
+  const [charSuccess, setCharSuccess] = useState<string | null>(null);
+  const [deleteCharTarget, setDeleteCharTarget] = useState<CampaignCharacterDto | null>(null);
 
   const [inspectedChar, setInspectedChar] = useState<CharacterInspectionDetail | null>(null);
   const [charModalLoading, setCharModalLoading] = useState(false);
@@ -734,6 +738,15 @@ export function CampaignDetailClient({
             </div>
           )}
 
+          {charSuccess && (
+            <div
+              role="status"
+              className="mb-3 rounded-[var(--rol-radius-md)] border border-[var(--rol-status-success-border)] bg-[var(--rol-status-success-bg)] px-3 py-2 text-xs text-[var(--rol-status-success-ink)]"
+            >
+              {charSuccess}
+            </div>
+          )}
+
           {characters.length === 0 ? (
             <p className="text-sm text-[var(--rol-ink-muted)]">
               Encara no hi ha cap personatge creat en aquesta campanya.
@@ -769,15 +782,38 @@ export function CampaignDetailClient({
                       {ch.canEdit ? 'Obrir fitxa' : 'Consultar fitxa'}
                     </Link>
                     {(canManage || ch.canEdit) && (
-                      <Button
-                        size="sm"
-                        variant="secondary"
-                        disabled={charModalLoading}
-                        onClick={() => handleInspectCharacter(ch.id)}
-                      >
-                        <SlidersHorizontal className="h-3.5 w-3.5" />
-                        {canManage ? 'Gestió GM' : 'Edició ràpida'}
-                      </Button>
+                      <>
+                        <Link
+                          href={`/campaigns/${campaign.id}/characters/${ch.id}?edit=1`}
+                          className="inline-flex items-center justify-center gap-1.5 rounded-[var(--rol-radius-md)] border border-[var(--rol-border-strong)] bg-[var(--rol-bg-surface)] px-3 py-1.5 text-xs font-medium text-[var(--rol-ink-primary)] shadow-sm transition-colors hover:bg-[var(--rol-bg-surface-alt)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--rol-accent-gold)]"
+                        >
+                          <Pencil className="h-3.5 w-3.5" />
+                          Editar
+                        </Link>
+                        {canManage && (
+                          <Button
+                            size="sm"
+                            variant="secondary"
+                            disabled={charModalLoading}
+                            onClick={() => handleInspectCharacter(ch.id)}
+                          >
+                            <SlidersHorizontal className="h-3.5 w-3.5" />
+                            Gestió GM
+                          </Button>
+                        )}
+                        <Button
+                          size="sm"
+                          variant="danger"
+                          onClick={() => {
+                            setCharError(null);
+                            setCharSuccess(null);
+                            setDeleteCharTarget(ch);
+                          }}
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                          Eliminar
+                        </Button>
+                      </>
                     )}
                   </div>
                 </li>
@@ -828,7 +864,7 @@ export function CampaignDetailClient({
         open={Boolean(inspectedChar)}
         onClose={() => setInspectedChar(null)}
         title={inspectedChar?.name ?? 'Personatge'}
-        description={`Estructura base (${readStartingLevel(inspectedChar?.sheetData ?? {})}) · Les estadístiques D&D 5e s’afegiran a la Fase 3.`}
+        description={`Gestió ràpida de notes privades del GM, permisos de camps i resum (${readStartingLevel(inspectedChar?.sheetData ?? {})}).`}
       >
         {inspectedChar && (
           <form onSubmit={handleUpdateCharacter} className="space-y-4">
@@ -952,6 +988,24 @@ export function CampaignDetailClient({
           </form>
         )}
       </Modal>
+
+      {/* Modal d'eliminació definitiva de personatge amb doble confirmació */}
+      {deleteCharTarget && (
+        <DeleteCharacterModal
+          key={`del-list-${deleteCharTarget.id}`}
+          open={Boolean(deleteCharTarget)}
+          onClose={() => setDeleteCharTarget(null)}
+          campaignId={campaign.id}
+          characterId={deleteCharTarget.id}
+          characterName={deleteCharTarget.name}
+          onDeleted={() => {
+            const deletedName = deleteCharTarget.name;
+            setDeleteCharTarget(null);
+            setCharSuccess(`S’ha eliminat el personatge "${deletedName}".`);
+            router.refresh();
+          }}
+        />
+      )}
     </div>
   );
 }

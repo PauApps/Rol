@@ -26,3 +26,4 @@ export * from './validation';
 export * from './permissions';
 export * from './rests';
 export * from './creation-validator';
+export * from './progression';

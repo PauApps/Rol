@@ -5,10 +5,13 @@ import {
   SPELL_SLOT_KEYS,
   getAllowedOfficialWeaponAbilities,
   type AbilityKey,
+  type Dnd5e2014AsiEntry,
   type Dnd5e2014AttackEntry,
   type Dnd5e2014CustomResource,
   type Dnd5e2014HitDiceUsedByDie,
   type Dnd5e2014InventoryItem,
+  type Dnd5e2014LevelHistoryEntry,
+  type Dnd5e2014SessionNote,
   type Dnd5e2014SpellEntry,
   type Dnd5e2014SpellcastingSourceOverride,
   type Dnd5e2014TraitEntry,
@@ -81,6 +84,36 @@ export function createDraftFromCharacter(record: CharacterSheetRecord): Characte
       limitOverride: s.attunement?.limitOverride ?? null,
     },
     currency: { ...s.currency },
+    generalInfo: {
+      alignment: s.generalInfo?.alignment ?? null,
+      faith: s.generalInfo?.faith ?? null,
+      age: s.generalInfo?.age ?? null,
+      size: s.generalInfo?.size ?? null,
+      senses: s.generalInfo?.senses ?? null,
+      appearanceNotes: s.generalInfo?.appearanceNotes ?? '',
+    },
+    background: {
+      backgroundName: s.background?.backgroundName ?? null,
+      personalityTraits: s.background?.personalityTraits ?? '',
+      ideals: s.background?.ideals ?? '',
+      bonds: s.background?.bonds ?? '',
+      flaws: s.background?.flaws ?? '',
+      backstory: s.background?.backstory ?? '',
+      sessionNotes: Array.isArray(s.background?.sessionNotes)
+        ? s.background.sessionNotes.map((n) => ({ ...n }))
+        : [],
+      additionalNotes: s.background?.additionalNotes ?? '',
+    },
+    progression: {
+      experiencePoints: s.progression?.experiencePoints ?? 0,
+      inspiration: Boolean(s.progression?.inspiration),
+      abilityScoreImprovements: Array.isArray(s.progression?.abilityScoreImprovements)
+        ? s.progression.abilityScoreImprovements.map((a) => ({ ...a }))
+        : [],
+      levelHistory: Array.isArray(s.progression?.levelHistory)
+        ? s.progression.levelHistory.map((h) => ({ ...h }))
+        : [],
+    },
   };
 }
 
@@ -230,6 +263,63 @@ function sameInventoryArray(
   if (a.length !== b.length) return false;
   for (let i = 0; i < a.length; i++) {
     if (!sameInventoryItem(a[i], b[i])) return false;
+  }
+  return true;
+}
+
+function sameSessionNotesArray(
+  a: readonly Dnd5e2014SessionNote[],
+  b: readonly Dnd5e2014SessionNote[]
+): boolean {
+  if (a.length !== b.length) return false;
+  for (let i = 0; i < a.length; i++) {
+    const x = a[i];
+    const y = b[i];
+    if (
+      x.id !== y.id ||
+      x.date !== y.date ||
+      (x.updatedAt ?? null) !== (y.updatedAt ?? null) ||
+      (x.category ?? null) !== (y.category ?? null) ||
+      x.title !== y.title ||
+      x.content !== y.content
+    ) {
+      return false;
+    }
+  }
+  return true;
+}
+
+function sameAsiArray(
+  a: readonly Dnd5e2014AsiEntry[],
+  b: readonly Dnd5e2014AsiEntry[]
+): boolean {
+  if (a.length !== b.length) return false;
+  for (let i = 0; i < a.length; i++) {
+    if (a[i].level !== b[i].level || a[i].notes !== b[i].notes) return false;
+  }
+  return true;
+}
+
+function sameLevelHistoryArray(
+  a: readonly Dnd5e2014LevelHistoryEntry[],
+  b: readonly Dnd5e2014LevelHistoryEntry[]
+): boolean {
+  if (a.length !== b.length) return false;
+  for (let i = 0; i < a.length; i++) {
+    const x = a[i];
+    const y = b[i];
+    if (
+      x.id !== y.id ||
+      x.level !== y.level ||
+      x.classId !== y.classId ||
+      (x.customClassName ?? null) !== (y.customClassName ?? null) ||
+      (x.subclassId ?? null) !== (y.subclassId ?? null) ||
+      (x.hpGain ?? null) !== (y.hpGain ?? null) ||
+      x.notes !== y.notes ||
+      x.date !== y.date
+    ) {
+      return false;
+    }
   }
   return true;
 }
@@ -828,6 +918,89 @@ export function buildCharacterSheetPatch(
   if (Object.keys(currencyPatch).length > 0) {
     sheetPatch.currency = currencyPatch;
     changedLabels.push('Monedes');
+  }
+
+  // 17. General narrative info (shared with Identity config modal)
+  const generalInfoPatch: Record<string, unknown> = {};
+  for (const field of ['alignment', 'faith', 'age', 'size', 'senses', 'appearanceNotes'] as const) {
+    const prevVal = base.sheetData.generalInfo?.[field] ?? (field === 'appearanceNotes' ? '' : null);
+    const nextVal = draft.generalInfo[field];
+    if (canEditSheetField(`generalInfo.${field}`, access) && nextVal !== prevVal) {
+      generalInfoPatch[field] = nextVal;
+    }
+  }
+  if (Object.keys(generalInfoPatch).length > 0) {
+    sheetPatch.generalInfo = generalInfoPatch;
+    changedLabels.push('Descripció i trets generals');
+  }
+
+  // 18. Background narrative & Journal (`background.sessionNotes`)
+  const backgroundPatch: Record<string, unknown> = {};
+  for (const field of [
+    'backgroundName',
+    'personalityTraits',
+    'ideals',
+    'bonds',
+    'flaws',
+    'backstory',
+    'additionalNotes',
+  ] as const) {
+    const prevVal =
+      base.sheetData.background?.[field] ?? (field === 'backgroundName' ? null : '');
+    const nextVal = draft.background[field];
+    if (canEditSheetField(`background.${field}`, access) && nextVal !== prevVal) {
+      backgroundPatch[field] = nextVal;
+    }
+  }
+  const hasScalarBackgroundChange = Object.keys(backgroundPatch).length > 0;
+  let hasJournalChange = false;
+  const prevNotes = base.sheetData.background?.sessionNotes ?? [];
+  if (
+    canEditSheetField('background.sessionNotes', access) &&
+    !sameSessionNotesArray(prevNotes, draft.background.sessionNotes)
+  ) {
+    backgroundPatch.sessionNotes = draft.background.sessionNotes.map((n) => ({ ...n }));
+    hasJournalChange = true;
+  }
+  if (hasScalarBackgroundChange || hasJournalChange) {
+    sheetPatch.background = backgroundPatch;
+    if (hasScalarBackgroundChange) changedLabels.push('Història i rerefons');
+    if (hasJournalChange) changedLabels.push('Diari');
+  }
+
+  // 19. Progression (XP, inspiration, ASI notes, level history)
+  const progPatch: Record<string, unknown> = {};
+  if (
+    canEditSheetField('progression.experiencePoints', access) &&
+    draft.progression.experiencePoints !== (base.sheetData.progression?.experiencePoints ?? 0)
+  ) {
+    progPatch.experiencePoints = draft.progression.experiencePoints;
+  }
+  if (
+    canEditSheetField('progression.inspiration', access) &&
+    draft.progression.inspiration !== Boolean(base.sheetData.progression?.inspiration)
+  ) {
+    progPatch.inspiration = draft.progression.inspiration;
+  }
+  const prevAsis = base.sheetData.progression?.abilityScoreImprovements ?? [];
+  if (
+    canEditSheetField('progression.abilityScoreImprovements', access) &&
+    !sameAsiArray(prevAsis, draft.progression.abilityScoreImprovements)
+  ) {
+    progPatch.abilityScoreImprovements = draft.progression.abilityScoreImprovements.map((a) => ({
+      ...a,
+    }));
+  }
+  const prevHistory = base.sheetData.progression?.levelHistory ?? [];
+  if (
+    canEditSheetField('progression.levelHistory', access) &&
+    !sameLevelHistoryArray(prevHistory, draft.progression.levelHistory)
+  ) {
+    progPatch.levelHistory = draft.progression.levelHistory.map((h) => ({ ...h }));
+  }
+  if (Object.keys(progPatch).length > 0) {
+    sheetPatch.progression = progPatch;
+    changedLabels.push('Progressió');
   }
 
   if (Object.keys(sheetPatch).length > 0) {

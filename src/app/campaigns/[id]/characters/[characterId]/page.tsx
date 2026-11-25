@@ -14,15 +14,17 @@ export const dynamic = 'force-dynamic';
 
 export default async function CharacterSheetPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ id: string; characterId: string }>;
+  searchParams: Promise<{ edit?: string }>;
 }) {
   const ctx = await getServerAuthContext();
   if (!ctx) {
     redirect('/login');
   }
 
-  const { id, characterId } = await params;
+  const [{ id, characterId }, sp] = await Promise.all([params, searchParams]);
   const db = await getDb();
 
   let detail: Awaited<ReturnType<typeof getCampaignDetail>> | null = null;
@@ -123,8 +125,14 @@ export default async function CharacterSheetPage({
           virtualDiceEnabled: detail.campaign.virtualDiceEnabled,
           canManage: detail.canManage,
           accessRole: detail.accessRole,
+          members: detail.canManage
+            ? detail.members
+                .filter((m) => m.status === 'active')
+                .map((m) => ({ id: m.id, displayName: m.displayName }))
+            : undefined,
         }}
         initialCharacter={serializedCharacter}
+        initialOpenEditModal={sp.edit === '1' && character.canEdit}
       />
     </AppShell>
   );

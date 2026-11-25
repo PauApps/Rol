@@ -19,7 +19,7 @@ Basat en la metodologia incremental de [DOCUMENT_MESTRE.md](./DOCUMENT_MESTRE.md
 - Límit de personatges per jugador dins cada campanya validat transaccionalment al servidor.
 - Flux segur perquè un convidat pugui vincular el seu accés i personatges a un compte registrat nou o existent sense duplicar membres ni personatges.
 
-## Fase 3 — Personatges i fitxes D&D 5e (2014) *(En curs — Increments 1, 2, 3A, 3B, 3C.1, 3C.2 i 3C.2.1 completats; 3C.3–3C.4 pendents)*
+## Fase 3 — Personatges i fitxes D&D 5e (2014) *(En curs — Increments 1, 2, 3A, 3B, 3C.1, 3C.2, 3C.2.1 i 3C.3 completats; 3C.4 pendent)*
 
 - **Increment 1 *(Completat)*:** Model universal `v2` D&D 5e (2014), motor de regles pur (nivells 1–20 oficials, crítics exclusius d’atac, recursos modulars, tirades `d20`) i configuració `virtualDiceEnabled` controlada pel GM (`false` per defecte).
 - **Increment 2 *(Completat)*:** Validació completa **Zod** (`dnd5e2014SheetSchema` i `dnd5e2014SheetPatchSchema`), compatibilitat retroactiva `v1 → v2` a `character-service.ts`, permisos granulars per secció/camp, protecció dels càlculs oficials davant jugadors, aplicació al servidor de `creationConfig` i proves de persistència/migracions.
@@ -28,8 +28,8 @@ Basat en la metodologia incremental de [DOCUMENT_MESTRE.md](./DOCUMENT_MESTRE.md
 - **Increment 3C.1 *(Completat)*:** Ruta dedicada `/campaigns/[id]/characters/[characterId]`, capçalera persistent responsive alimentada exclusivament des de `computed`, navegació accessible per les 5 pestanyes, primera pestanya «Característiques i combat» funcional (6 característiques, 6 salvacions, 18 habilitats oficials, combat/vitalitat, daus de cop per mida amb protecció de fitxes antigues i atacs amb separació per `kind`), selectors de mode de tirada (`rollModes`), modal de gestió GM i integració amb `CampaignDetailClient.tsx`.
 - **Increment 3C.2 *(Completat)*:** Pestanyes **«Màgia i habilitats»** (fonts de conjuració per classe i multiclasse, Màgia de Pacte diferenciada, espais 1r–9è i Pacte, llista de conjurs per nivell amb límit oficial de preparats i bloqueig de `alwaysPrepared`, recursos oficials i personalitzats i trets/aptituds) i **«Equipament i inventari»** (7 categories d’inventari sense duplicació d’armes, integració directa d’armes i armadures amb atacs/CA al servidor, sintonització i límit, 5 monedes i pes total sense capacitat de càrrega inventada).
 - **Increment 3C.2.1 *(Completat)*:** Creació guiada pas a pas (`/campaigns/[id]/characters/new`) amb catàleg oficial D&D 5e 2014 (9 races amb subraces, 12 classes, 8 antecedents, paquets d’equipament, compra de punts/array estàndard/4d6/manual GM/lliure), validació al servidor de `abilityScoreMethod`, llistes permeses i camps obligatoris segons `freedomMode`, i modal `CharacterIdentityConfigModal` per editar identitat, raça/subraça, classes/nivells i competències des de la fitxa universal.
-- **Increments 3C.3–3C.4 *(Pendents)*:**
-  - **3C.3:** Pestanyes «Història i diari» i «Progressió i evolució».
+- **Increment 3C.3 *(Completat)*:** Pestanyes **«Història i diari»** (camps narratius compartits sense duplicació i diari cronològic amb categories opcionals, creació, edició, eliminació amb confirmació i control `gmOnly`) i **«Progressió i evolució»** (nivell, PE oficials, barra de progrés, desglossament multiclasse, requisits PHB p. 163 validats al servidor, assistent de pujada de nivell `LevelUpModal` amb PV/subclasse/ASI/dots/conjurs/recursos i `levelHistory`).
+- **Increment 3C.4 *(Pendent)*:**
   - **3C.4:** Endpoints i fluxos interactius de descansos curt/llarg, dau virtual amb historial de tirades, camps personalitzats i còpia selectiva de configuració entre campanyes.
 
 ## Fase 4 — Historial, auditories de fitxa i biblioteca de manuals
