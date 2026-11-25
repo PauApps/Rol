@@ -69,17 +69,26 @@ S’ha introduït un model explícit de tipus d’entrada dins `Dnd5e2014AttackE
   - Si la fitxa antiga té `hitDiceUsed > 0` amb **mides mixtes** (p. ex. Guerrer `d10` + Mag `d6`) o classe `custom` sense dau oficial, `normalizeDnd5e2014Sheet()` conserva **`hitDiceUsedByDie = null`** i exposa `hasUnallocatedLegacyUsage: true` sense inventar mai de quina mida eren els daus gastats.
 - **Descans curt i llarg (`rests.ts`):**
   - `buildShortRestPatch()` valida cada mida de dau sol·licitada contra `byDie[dieSize].available` (`400 INSUFFICIENT_HIT_DICE_FOR_SIZE`) quan el seguiment per mida és actiu. Si existeix ús antic sense assignació per mida (`hitDiceUsedByDie === null && hitDiceUsed > 0`, és a dir, `hitDicePool.hasUnallocatedLegacyUsage === true`), bloqueja qualsevol despesa de daus de cop amb `400 UNALLOCATED_LEGACY_HIT_DICE` sense modificar PV ni cap altre camp.
-  - `buildLongRestPatch()` recupera fins a `Math.max(1, Math.floor(totalLevel / 2))` daus en fitxes amb seguiment per mida (amb selecció explícita via `hitDiceToRecover` validada o recuperació `d12 → d10 → d8 → d6`). En fitxes antigues amb `hitDiceUsedByDie === null`, el descans llarg no queda bloquejat: restableix `hitDiceUsed = 0` i `hitDiceUsedByDie = {}` sense inventar cap distribució prèvia, habilitant el seguiment per mida per a futurs descansos curts.
+  - `buildLongRestPatch()` recupera fins a `allowance = Math.max(1, Math.floor(totalLevel / 2))` daus tant en fitxes amb seguiment per mida (amb selecció explícita via `hitDiceToRecover` validada o recuperació `d12 → d10 → d8 → d6`) com en fitxes antigues amb `hitDiceUsedByDie === null`. En fitxes antigues, aplica estrictament `recovered = Math.min(spentDice, allowance)` i `remainingSpent = spentDice - recovered`: si `remainingSpent > 0`, conserva `hitDiceUsedByDie = null` sense inventar mides; si `remainingSpent === 0`, inicialitza `hitDiceUsedByDie = {}`.
 
-#### Correcció de tancament — Daus de cop antics sense assignació per mida (sobre `de950ef`)
+#### Correcció de tancament — Recuperació oficial i bloqueig conservador de daus de cop antics (sobre `de950ef` i `20e0c82`)
 
-- **Problema detectat:** fins i tot conservant `hitDiceUsedByDie: null` en fitxes antigues amb `hitDiceUsed > 0`, la implementació anterior de `buildShortRestPatch()` permetia gastar daus indicant una mida concreta contra la reserva global, amb el risc de donar per disponible un dau que realment ja s’havia gastat abans (p. ex. Fighter 3 / Wizard 2 amb `hitDiceUsed = 3`).
-- **Solució conservadora implementada:**
-  - A `buildShortRestPatch()` ([rests.ts](src/domain/systems/dnd5e-2014/rests.ts)), abans de validar mides o sumar curació, si la petició sol·licita gastar daus (`hitDiceToSpend` amb `count > 0`) i `hitDicePool.hasUnallocatedLegacyUsage` (`hitDiceUsedByDie === null && hitDiceUsed > 0`) és cert, es llança `badRequest('UNALLOCATED_LEGACY_HIT_DICE', ...)` tant per a una sola classe com multiclasse. No es modifica HP ni cap altre valor, i indicar una mida explícita (`d6`/`d8`/`d10`/`d12`) no permet esquivar la protecció.
-  - Si `hitDiceUsed === 0` (sense daus antics pendents), o si totes les classes comparteixen una única mida oficial (normalitzada automàticament), o si `hitDiceUsedByDie` conté una distribució coneguda, el descans curt continua funcionant segons les regles estàndard.
-  - A `buildLongRestPatch()`, si `hitDiceUsedByDie === null`, el descans llarg restableix `hitDiceUsed` a `0` i `hitDiceUsedByDie` a `{}` (mantenint la recuperació normal de PV, espais de conjur i recursos) sense inventar cap distribució anterior, deixant el personatge preparat per tornar a gastar daus per mida al següent descans curt.
+- **Discrepàncies detectades:**
+  1. *(Corregida a `20e0c82`)* En fitxes antigues amb `hitDiceUsed > 0` i `hitDiceUsedByDie === null`, `buildShortRestPatch()` permetia gastar daus indicant una mida explícita contra la reserva global, amb el risc de donar per disponible un dau ja gastat.
+  2. *(Corregida ara sobre `20e0c82`)* A `buildLongRestPatch()`, la branca de fitxes antigues (`hitDiceUsedByDie === null`) restablia directament tots els daus gastats a `0` i `{}` en un sol descans llarg, contravenint la regla oficial de D&D 5e (2014) PHB p. 186 (recuperar com a màxim la meitat dels daus totals arrodonida cap avall, mínim `1`).
+- **Nova lògica implementada:**
+  - A `buildShortRestPatch()` ([rests.ts](src/domain/systems/dnd5e-2014/rests.ts)), si es demana gastar daus (`count > 0`) amb `hitDicePool.hasUnallocatedLegacyUsage === true` (`hitDiceUsedByDie === null && hitDiceUsed > 0`), es bloqueja amb `badRequest('UNALLOCATED_LEGACY_HIT_DICE', ...)` sense modificar PV ni cap altre valor, i sense permetre esquivar-ho indicant `d6`/`d8`/`d10`/`d12`.
+  - A `buildLongRestPatch()` ([rests.ts](src/domain/systems/dnd5e-2014/rests.ts)), la branca `hitDiceUsedByDie === null` calcula `allowance = Math.max(1, Math.floor(totalLevel / 2))`, `recovered = Math.min(spentDice, allowance)` i `remainingSpent = spentDice - recovered`:
+    - **Recuperació parcial (`remainingSpent > 0`):** desa `hitDiceUsed = remainingSpent` i `hitDiceUsedByDie = null` (no inventa ni infereix cap distribució); el següent descans curt continua bloquejat amb `UNALLOCATED_LEGACY_HIT_DICE`.
+    - **Recuperació total (`remainingSpent === 0`):** desa `hitDiceUsed = 0` i `hitDiceUsedByDie = {}`; el personatge ja pot tornar a gastar daus per mida als descansos curts posteriors.
+    - **Permisos i seguretat:** respecta `hitPoints.hitDiceUsed` i `hitPoints.hitDiceUsedByDie` (`skippedByPermissions`) i continua rebutjant `hitDiceToRecover` explícit quan `hitDiceUsedByDie === null` (`UNALLOCATED_LEGACY_HIT_DICE`). No s’altera la recuperació normal quan `hitDiceUsedByDie !== null`.
+- **Exemples verificats (fitxes antigues sense assignació):**
+  - **Nivell 5 (`allowance = 2`), 3 gastats:** recupera `2` → `hitDiceUsed = 1`, `hitDiceUsedByDie = null` (recuperació parcial; el descans curt continua bloquejat fins a un segon descans llarg que el porti a `0` i `{}`).
+  - **Nivell 5 (`allowance = 2`), 2 gastats:** recupera `2` → `hitDiceUsed = 0`, `hitDiceUsedByDie = {}`.
+  - **Nivell 5 (`allowance = 2`), 1 gastat:** recupera `1` → `hitDiceUsed = 0`, `hitDiceUsedByDie = {}`.
+  - **Nivell 10 (`allowance = 5`), 7 gastats:** recupera `5` → `hitDiceUsed = 2`, `hitDiceUsedByDie = null`.
 - **Fitxers modificats en aquesta correcció final:** `src/domain/systems/dnd5e-2014/rests.ts`, `tests/phase3b-domain-extensions.test.ts` i `PHASE_3B_CORRECTIONS.md`.
-- **Confirmació d’abast:** no s’ha modificat cap component React, estil CSS, ruta visual ni migració SQL, ni s’ha iniciat l’Increment 3C.
+- **Confirmació d’abast:** no s’ha modificat cap component React, estil CSS, ruta visual, esquema de dades ni migració SQL, ni s’ha iniciat l’Increment 3C.
 
 ### 3.3 Overrides de màgia per classe (`spellcasting.sourceOverrides`)
 
@@ -101,25 +110,25 @@ Nous camins incorporats a `PROTECTED_OFFICIAL_CALCULATION_PATHS` (bloquejats als
 Totes les ordres s’han executat després de completar totes les modificacions de codi i proves (`rests.ts` i `tests/phase3b-domain-extensions.test.ts`):
 
 - **`npm.cmd run typecheck`** (`tsc --noEmit`): **Superat (codi de sortida 0)** — `0` errors.
-- **`npm.cmd test`** (`vitest run`): **Superat (codi de sortida 0)** — **10 fitxers de prova superats (10)**, **38 proves superades (38)**, `0` errors, `0` omeses, durada `52.61s`:
-  - `tests/phase2-campaign-rules-and-limits.test.ts` (2 tests) — `24468ms`
-  - `tests/campaigns-and-isolation.test.ts` (2 tests) — `26178ms`
-  - `tests/player-invitations-and-permissions.test.ts` (2 tests) — `26288ms`
-  - `tests/dnd5e-2014-virtual-dice-config.test.ts` (2 tests) — `26702ms`
-  - `tests/phase2-identity-linking.test.ts` (2 tests) — `27995ms`
-  - `tests/dnd5e-2014-rules-engine.test.ts` (7 tests) — `90ms`
-  - `tests/auth-and-admin.test.ts` (3 tests) — `32956ms`
-  - `tests/phase3-character-persistence-and-permissions.test.ts` (4 tests) — `37447ms`
-  - `tests/db-production-guard.test.ts` (6 tests) — `9813ms`
-  - `tests/phase3b-domain-extensions.test.ts` (8 tests) — `15457ms`
-    - Inclou les comprovacions específiques de tancament per a Fighter 3 / Wizard 2 amb `hitDiceUsed > 0` i `hitDiceUsedByDie === null` (rebuig `UNALLOCATED_LEGACY_HIT_DICE` sense alterar HP ni BD ni permetre esquivar-lo amb `dieSize` explícit), personatge d’una classe sense assignació, personatge amb `hitDiceUsed === 0` i `hitDiceUsedByDie === null`, distribució coneguda, i descans llarg que restableix `hitDiceUsed === 0` i `hitDiceUsedByDie === {}` habilitant la despesa posterior per mida.
-- **`npm.cmd run build`** (`next build`, Next.js 16.4.6 Turbopack): **Superat (codi de sortida 0)** — compilació en `4.0s`, TypeScript en `10.3s`, `3/3` pàgines estàtiques generades en `290ms`.
+- **`npm.cmd test`** (`vitest run`): **Superat (codi de sortida 0)** — **10 fitxers de prova superats (10)**, **38 proves superades (38)**, `0` errors, `0` omeses, durada `56.17s`:
+  - `tests/campaigns-and-isolation.test.ts` (2 tests) — `28443ms`
+  - `tests/player-invitations-and-permissions.test.ts` (2 tests) — `28874ms`
+  - `tests/phase2-campaign-rules-and-limits.test.ts` (2 tests) — `29040ms`
+  - `tests/dnd5e-2014-virtual-dice-config.test.ts` (2 tests) — `29587ms`
+  - `tests/phase2-identity-linking.test.ts` (2 tests) — `30102ms`
+  - `tests/dnd5e-2014-rules-engine.test.ts` (7 tests) — `67ms`
+  - `tests/auth-and-admin.test.ts` (3 tests) — `33872ms`
+  - `tests/phase3-character-persistence-and-permissions.test.ts` (4 tests) — `41551ms`
+  - `tests/db-production-guard.test.ts` (6 tests) — `10828ms`
+  - `tests/phase3b-domain-extensions.test.ts` (8 tests) — `17040ms`
+    - Inclou tots els casos de recuperació oficial per a fitxes antigues: nivell 5 amb `3`/`2`/`1` daus gastats, nivell 10 amb `7` daus gastats, persistència del descans llarg parcial (`hitDiceUsed = 1, hitDiceUsedByDie = null`) mantenint el bloqueig `UNALLOCATED_LEGACY_HIT_DICE` per a `d6`/`d8`/`d10`/`d12`, segon descans llarg fins a `0` i `{}`, despesa posterior per mida al descans curt, recuperació normal amb distribució coneguda, rebuig de `hitDiceToRecover` en distribució desconeguda i respecte de permisos sobre `hitPoints.hitDiceUsed` i `hitPoints.hitDiceUsedByDie`.
+- **`npm.cmd run build`** (`next build`, Next.js 16.4.6 Turbopack): **Superat (codi de sortida 0)** — compilació en `2.6s`, TypeScript en `8.1s`, `3/3` pàgines estàtiques generades en `330ms`.
 
 ---
 
 ## 5. Limitacions que encara queden
 
 1. **Entrades antigues sense `kind` previ a la revisió:** en normalitzar fitxes antigues sense camp `kind`, una entrada amb `inventoryItemId !== null` es classifica com `weapon_override`, una amb nom estàndard de cop desarmat com `unarmed`, i la resta com `special`. Qualsevol atac màgic preexistent sense `kind: 'spell'` requerirà indicar `kind: 'spell'` en editar-lo per obtenir el càlcul oficial de conjuració.
-2. **Fitxes antigues multiclasse mixtes amb daus pendents (`hitDiceUsedByDie: null` i `hitDiceUsed > 0`):** per protecció conservadora, mentre conservin daus gastats antics sense assignació per mida no poden gastar daus de cop durant un descans curt (`400 UNALLOCATED_LEGACY_HIT_DICE`) ni recuperar mides individuals explícites (`hitDiceToRecover`), fins que completin un descans llarg que restableixi `hitDiceUsed: 0` i inicialitzi `hitDiceUsedByDie: {}`.
+2. **Fitxes antigues multiclasse mixtes amb daus pendents (`hitDiceUsedByDie: null` i `hitDiceUsed > 0`):** per protecció conservadora, mentre conservin daus gastats antics sense assignació per mida no poden gastar daus de cop durant un descans curt (`400 UNALLOCATED_LEGACY_HIT_DICE`) ni recuperar mides individuals explícites (`hitDiceToRecover`), fins que completin tants descansos llargs oficials (`max(1, floor(totalLevel / 2))` per descans) com calguin per deixar `hitDiceUsed: 0` i inicialitzar `hitDiceUsedByDie: {}`.
 3. **Classes `custom` sense dau oficial definit al catàleg:** si un personatge combina una classe `custom` amb `hitDiceUsed > 0`, `inferHitDiceUsedByDieFromClasses()` retorna `null` per prudència i la validació de capacitat per mida només s’aplica quan totes les classes pertanyen al catàleg oficial (o es gestiona mitjançant `hitDiceUsedByDie` explícit).
 4. **Endpoints HTTP i interfície de l’Increment 3C:** la UI de les 5 pestanyes i els eventuals endpoints dedicats de descans/tirada virtual continuen pendents de l’Increment 3C.

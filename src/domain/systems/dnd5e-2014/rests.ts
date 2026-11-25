@@ -433,13 +433,18 @@ export function buildLongRestPatch(
             }
           }
           hpPatch.hitDiceUsedByDie = patchByDie;
+        } else {
+          skippedByPermissions.push('hitPoints.hitDiceUsedByDie');
         }
       } else {
         skippedByPermissions.push('hitPoints.hitDiceUsed');
       }
     } else {
-      // Legacy unallocated multiclass usage: reset cleanly to 0 and {} without inventing prior die splits
-      if (options?.hitDiceToRecover && sumHitDiceUsedByDie(options.hitDiceToRecover) > 0) {
+      // Legacy unallocated multiclass usage: recover at most official allowance = max(1, floor(totalLevel / 2))
+      if (
+        options?.hitDiceToRecover &&
+        Object.values(options.hitDiceToRecover).some((v) => v !== undefined)
+      ) {
         throw badRequest(
           'UNALLOCATED_LEGACY_HIT_DICE',
           'Aquesta fitxa antiga no té desglossament per mida dels daus gastats; executa el descans llarg sense especificar mides individuals.'
@@ -447,19 +452,25 @@ export function buildLongRestPatch(
       }
 
       if (isAllowed('hitPoints.hitDiceUsed', options)) {
-        hitDiceRecovered = spentDice;
-        newHitDiceUsed = 0;
+        hitDiceRecovered = maxRecoverable;
+        newHitDiceUsed = Math.max(0, spentDice - hitDiceRecovered);
         hitDiceRecoveredByDie = null;
-        hpPatch.hitDiceUsed = 0;
+        hpPatch.hitDiceUsed = newHitDiceUsed;
         if (isAllowed('hitPoints.hitDiceUsedByDie', options)) {
-          hpPatch.hitDiceUsedByDie = {};
+          hpPatch.hitDiceUsedByDie = newHitDiceUsed > 0 ? null : {};
+        } else {
+          skippedByPermissions.push('hitPoints.hitDiceUsedByDie');
         }
       } else {
         skippedByPermissions.push('hitPoints.hitDiceUsed');
       }
     }
-  } else if (sheet.hitPoints.hitDiceUsedByDie === null && isAllowed('hitPoints.hitDiceUsedByDie', options)) {
-    hpPatch.hitDiceUsedByDie = {};
+  } else if (sheet.hitPoints.hitDiceUsedByDie === null) {
+    if (isAllowed('hitPoints.hitDiceUsedByDie', options)) {
+      hpPatch.hitDiceUsedByDie = {};
+    } else {
+      skippedByPermissions.push('hitPoints.hitDiceUsedByDie');
+    }
   }
 
   if (Object.keys(hpPatch).length > 0) {

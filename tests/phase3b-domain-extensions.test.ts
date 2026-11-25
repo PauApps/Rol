@@ -1267,22 +1267,73 @@ describe('Fase 3B: Extensions del model de dades, atacs, màgia, descansos, prog
         current: 18,
       });
 
-      // 2.3 Un sol descans llarg sobre fitxa antiga multiclasse restableix hitDiceUsed a 0 i hitDiceUsedByDie a {},
-      // permetent tornar a gastar daus per mida en el següent descans curt
-      const longLegacyReset = buildLongRestPatch(normalizedLegacyMulti);
-      expect(longLegacyReset.patch.hitPoints).toMatchObject({
+      // 2.3 Recuperació oficial en descans llarg per a fitxes antigues sense inventar mides (allowance = max(1, floor(nivell/2))):
+      // Cas A: nivell 5, 3 gastats -> recupera 2, queden 1 i hitDiceUsedByDie: null
+      const longLegacyPartial = buildLongRestPatch(normalizedLegacyMulti);
+      expect(longLegacyPartial.summary.hitDiceRecovered).toBe(2);
+      expect(longLegacyPartial.summary.hitDiceRecoveredByDie).toBeNull();
+      expect(longLegacyPartial.patch.hitPoints).toMatchObject({
         current: 36,
+        hitDiceUsed: 1,
+        hitDiceUsedByDie: null,
+      });
+      const afterLongPartialDb = await updateCharacterBase(db, playerCtx, camp.id, legacyMulti.id, {
+        sheetPatch: longLegacyPartial.patch,
+      });
+      expect((afterLongPartialDb.sheetData.hitPoints as Record<string, unknown>).hitDiceUsed).toBe(1);
+      expect(
+        (afterLongPartialDb.sheetData.hitPoints as Record<string, unknown>).hitDiceUsedByDie
+      ).toBeNull();
+
+      // Després del descans llarg parcial encara queden daus sense assignació: qualsevol mida explícita (d6/d8/d10/d12) continua bloquejada
+      const sheetAfterPartial = normalizeDnd5e2014Sheet(
+        afterLongPartialDb.sheetData,
+        'Espasamag Antic'
+      );
+      for (const dieSize of [6, 8, 10, 12] as const) {
+        let postPartialErr: unknown;
+        try {
+          buildShortRestPatch(sheetAfterPartial, {
+            hitDiceToSpend: [{ dieSize, count: 1, rolls: [3] }],
+          });
+        } catch (err) {
+          postPartialErr = err;
+        }
+        expect(postPartialErr).toMatchObject({ status: 400, code: 'UNALLOCATED_LEGACY_HIT_DICE' });
+      }
+
+      // No permet especificar recuperació per mida (`hitDiceToRecover`) en fitxes antigues amb distribució desconeguda
+      for (const hitDiceToRecover of [{ d10: 1 }, { d10: 0 }] as const) {
+        let recoverErr: unknown;
+        try {
+          buildLongRestPatch(sheetAfterPartial, { hitDiceToRecover });
+        } catch (err) {
+          recoverErr = err;
+        }
+        expect(recoverErr).toMatchObject({ status: 400, code: 'UNALLOCATED_LEGACY_HIT_DICE' });
+      }
+
+      // Segon descans llarg (nivell 5, 1 gastat -> recupera 1): arriba a 0 i inicialitza hitDiceUsedByDie a {}
+      const longLegacyComplete = buildLongRestPatch(sheetAfterPartial);
+      expect(longLegacyComplete.summary.hitDiceRecovered).toBe(1);
+      expect(longLegacyComplete.patch.hitPoints).toEqual({
         hitDiceUsed: 0,
         hitDiceUsedByDie: {},
       });
-      const afterLongDb = await updateCharacterBase(db, playerCtx, camp.id, legacyMulti.id, {
-        sheetPatch: longLegacyReset.patch,
+      const afterLongCompleteDb = await updateCharacterBase(db, playerCtx, camp.id, legacyMulti.id, {
+        sheetPatch: longLegacyComplete.patch,
       });
-      expect((afterLongDb.sheetData.hitPoints as Record<string, unknown>).hitDiceUsed).toBe(0);
-      expect((afterLongDb.sheetData.hitPoints as Record<string, unknown>).hitDiceUsedByDie).toEqual({});
+      expect((afterLongCompleteDb.sheetData.hitPoints as Record<string, unknown>).hitDiceUsed).toBe(0);
+      expect(
+        (afterLongCompleteDb.sheetData.hitPoints as Record<string, unknown>).hitDiceUsedByDie
+      ).toEqual({});
 
-      const sheetAfterLong = normalizeDnd5e2014Sheet(afterLongDb.sheetData, 'Espasamag Antic');
-      const shortAfterLong = buildShortRestPatch(sheetAfterLong, {
+      // Un cop a 0 i amb {}, el descans curt ja permet gastar daus per mida i inicialitza el seguiment
+      const sheetAfterComplete = normalizeDnd5e2014Sheet(
+        afterLongCompleteDb.sheetData,
+        'Espasamag Antic'
+      );
+      const shortAfterLong = buildShortRestPatch(sheetAfterComplete, {
         hitDiceToSpend: [{ dieSize: 6, count: 1, rolls: [5] }],
       });
       expect(shortAfterLong.patch.hitPoints).toEqual({
@@ -1297,6 +1348,60 @@ describe('Fase 3B: Extensions del model de dades, atacs, màgia, descansos, prog
       expect(
         (afterPostLongShortDb.sheetData.hitPoints as Record<string, unknown>).hitDiceUsedByDie
       ).toEqual({ d6: 1 });
+
+      // Casos addicionals oficials (nivell 5 amb 2 i 1 gastats; nivell 10 amb 7 gastats) i permisos sobre hitDiceUsed / hitDiceUsedByDie
+      const makeLegacyMultiSheet = (fighterLvl: number, wizardLvl: number, used: number) => {
+        const s = createEmptyDnd5e2014Sheet('Prova Llegat');
+        s.raceAndClass.classes = [
+          { classId: 'fighter', level: fighterLvl },
+          { classId: 'wizard', level: wizardLvl },
+        ];
+        s.hitPoints = {
+          max: 50,
+          current: 30,
+          temporary: 0,
+          hitDice: null,
+          hitDiceUsed: used,
+          hitDiceUsedByDie: null,
+          deathSaves: { successes: 0, failures: 0 },
+        };
+        return s;
+      };
+
+      const lv5Used2 = buildLongRestPatch(makeLegacyMultiSheet(3, 2, 2));
+      expect(lv5Used2.summary.hitDiceRecovered).toBe(2);
+      expect(lv5Used2.patch.hitPoints).toMatchObject({ hitDiceUsed: 0, hitDiceUsedByDie: {} });
+
+      const lv5Used1 = buildLongRestPatch(makeLegacyMultiSheet(3, 2, 1));
+      expect(lv5Used1.summary.hitDiceRecovered).toBe(1);
+      expect(lv5Used1.patch.hitPoints).toMatchObject({ hitDiceUsed: 0, hitDiceUsedByDie: {} });
+
+      const lv10Used7 = buildLongRestPatch(makeLegacyMultiSheet(6, 4, 7));
+      expect(lv10Used7.summary.hitDiceRecovered).toBe(5);
+      expect(lv10Used7.patch.hitPoints).toMatchObject({ hitDiceUsed: 2, hitDiceUsedByDie: null });
+
+      // Permisos granulars sobre `hitPoints.hitDiceUsed` i `hitPoints.hitDiceUsedByDie`
+      const blockedScalarPerms = normalizeFieldPermissions({
+        gmOnlyFields: ['hitPoints.hitDiceUsed', 'hitPoints.hitDiceUsedByDie'],
+      });
+      const resBlockedScalar = buildLongRestPatch(makeLegacyMultiSheet(3, 2, 3), {
+        isGm: false,
+        permissions: blockedScalarPerms,
+      });
+      expect(resBlockedScalar.patch.hitPoints?.hitDiceUsed).toBeUndefined();
+      expect(resBlockedScalar.patch.hitPoints?.hitDiceUsedByDie).toBeUndefined();
+      expect(resBlockedScalar.summary.skippedByPermissions).toContain('hitPoints.hitDiceUsed');
+
+      const blockedByDieOnlyPerms = normalizeFieldPermissions({
+        gmOnlyFields: ['hitPoints.hitDiceUsedByDie'],
+      });
+      const resBlockedByDieOnly = buildLongRestPatch(makeLegacyMultiSheet(3, 2, 3), {
+        isGm: false,
+        permissions: blockedByDieOnlyPerms,
+      });
+      expect(resBlockedByDieOnly.patch.hitPoints?.hitDiceUsed).toBe(1);
+      expect(resBlockedByDieOnly.patch.hitPoints?.hitDiceUsedByDie).toBeUndefined();
+      expect(resBlockedByDieOnly.summary.skippedByPermissions).toContain('hitPoints.hitDiceUsedByDie');
     } finally {
       await close();
     }
