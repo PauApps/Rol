@@ -97,7 +97,8 @@ function pruneZeroHitDice(byDie: Dnd5e2014HitDiceUsedByDie): Dnd5e2014HitDiceUse
  * - Resets resources with `recovery === 'short_rest'`.
  * - Resets Warlock Pact Magic slots (`spellSlotsUsed.pact = 0`) without touching regular slots.
  * - Spends Hit Dice ONLY when explicitly requested in `hitDiceToSpend`, validating per-die
- *   class availability when tracked (`hitDiceUsedByDie !== null`) and never inventing legacy splits.
+ *   class availability when tracked (`hitDiceUsedByDie !== null`) and blocking spending with
+ *   `UNALLOCATED_LEGACY_HIT_DICE` when unallocated legacy usage exists (`hitDiceUsedByDie === null && hitDiceUsed > 0`).
  * - Respects player field permissions without ever altering official maximums or protected fields.
  */
 export function buildShortRestPatch(
@@ -115,6 +116,16 @@ export function buildShortRestPatch(
   const byDieEntryMap = new Map(hitDicePool.byDie.map((entry) => [entry.dieSize, entry]));
   const hasDefinedClassPool = hitDicePool.byDie.length > 0;
   const isTrackedByDie = sheet.hitPoints.hitDiceUsedByDie !== null;
+
+  const hasRequestedHitDiceSpend = Boolean(
+    options?.hitDiceToSpend?.some((req) => typeof req.count === 'number' && req.count > 0)
+  );
+  if (hasRequestedHitDiceSpend && hitDicePool.hasUnallocatedLegacyUsage) {
+    throw badRequest(
+      'UNALLOCATED_LEGACY_HIT_DICE',
+      'No es poden gastar daus de cop durant un descans curt perquè la fitxa conserva daus gastats antics sense assignació per mida. Completa un descans llarg per restablir-los i inicialitzar el seguiment per mida.'
+    );
+  }
 
   const hitDieRolls: ShortRestSummary['hitDieRolls'] = [];
   const requestedBySize = new Map<HitDieSize, number>();
@@ -207,14 +218,11 @@ export function buildShortRestPatch(
         if (isAllowed('hitPoints.hitDiceUsedByDie', options)) {
           hpPatch.hitDiceUsedByDie = cleanedByDie;
         }
-      } else if (hitDicePool.used === 0) {
+      } else {
         hpPatch.hitDiceUsed = totalSpent;
         if (isAllowed('hitPoints.hitDiceUsedByDie', options)) {
           hpPatch.hitDiceUsedByDie = pruneZeroHitDice(spentByDie);
         }
-      } else {
-        // Legacy multiclass unallocated usage: increment global counter without inventing per-die history
-        hpPatch.hitDiceUsed = hitDicePool.used + totalSpent;
       }
     } else {
       skippedByPermissions.push('hitPoints.hitDiceUsed');
@@ -430,7 +438,7 @@ export function buildLongRestPatch(
         skippedByPermissions.push('hitPoints.hitDiceUsed');
       }
     } else {
-      // Legacy unallocated multiclass usage
+      // Legacy unallocated multiclass usage: reset cleanly to 0 and {} without inventing prior die splits
       if (options?.hitDiceToRecover && sumHitDiceUsedByDie(options.hitDiceToRecover) > 0) {
         throw badRequest(
           'UNALLOCATED_LEGACY_HIT_DICE',
@@ -439,18 +447,19 @@ export function buildLongRestPatch(
       }
 
       if (isAllowed('hitPoints.hitDiceUsed', options)) {
-        hitDiceRecovered = maxRecoverable;
-        newHitDiceUsed = Math.max(0, spentDice - hitDiceRecovered);
+        hitDiceRecovered = spentDice;
+        newHitDiceUsed = 0;
         hitDiceRecoveredByDie = null;
-        hpPatch.hitDiceUsed = newHitDiceUsed;
-        if (newHitDiceUsed === 0 && isAllowed('hitPoints.hitDiceUsedByDie', options)) {
-          // Zero ambiguity left once all spent dice recover
+        hpPatch.hitDiceUsed = 0;
+        if (isAllowed('hitPoints.hitDiceUsedByDie', options)) {
           hpPatch.hitDiceUsedByDie = {};
         }
       } else {
         skippedByPermissions.push('hitPoints.hitDiceUsed');
       }
     }
+  } else if (sheet.hitPoints.hitDiceUsedByDie === null && isAllowed('hitPoints.hitDiceUsedByDie', options)) {
+    hpPatch.hitDiceUsedByDie = {};
   }
 
   if (Object.keys(hpPatch).length > 0) {

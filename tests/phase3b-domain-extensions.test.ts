@@ -1191,36 +1191,112 @@ describe('Fase 3B: Extensions del model de dades, atacs, màgia, descansos, prog
         unallocatedUsed: 3,
       });
 
-      // Descans curt gasta 1d10 sense inventar `hitDiceUsedByDie` i persisteix hitDiceUsed: 4
+      // 2.1 Descans curt amb daus antics sense assignació (hitDiceUsed > 0 i hitDiceUsedByDie === null):
+      // bloquejat amb UNALLOCATED_LEGACY_HIT_DICE encara que s'indiqui una mida explícita, sense modificar HP ni BD
       const normalizedLegacyMulti = normalizeDnd5e2014Sheet(
         loadedLegacyMulti.sheetData,
         'Espasamag Antic'
       );
-      const legacyShort = buildShortRestPatch(normalizedLegacyMulti, {
-        hitDiceToSpend: [{ dieSize: 10, count: 1, rolls: [7] }],
-      });
-      const afterShortDb = await updateCharacterBase(db, playerCtx, camp.id, legacyMulti.id, {
-        sheetPatch: legacyShort.patch,
-      });
-      expect((afterShortDb.sheetData.hitPoints as Record<string, unknown>).hitDiceUsed).toBe(4);
-      expect((afterShortDb.sheetData.hitPoints as Record<string, unknown>).hitDiceUsedByDie).toBeNull();
+      const hpBeforeBlockedShort = structuredClone(normalizedLegacyMulti.hitPoints);
+      for (const dieSize of [10, 6] as const) {
+        let caughtErr: unknown;
+        try {
+          buildShortRestPatch(normalizedLegacyMulti, {
+            hitDiceToSpend: [{ dieSize, count: 1, rolls: [4] }],
+          });
+        } catch (err) {
+          caughtErr = err;
+        }
+        expect(caughtErr).toMatchObject({
+          status: 400,
+          code: 'UNALLOCATED_LEGACY_HIT_DICE',
+        });
+      }
+      expect(normalizedLegacyMulti.hitPoints).toEqual(hpBeforeBlockedShort);
 
-      // Dos descansos llargs (allowance = floor(5/2) = 2 cadascun): 4 -> 2 (encara null) -> 0 (gradua a {})
-      const sheetAfterShort = normalizeDnd5e2014Sheet(afterShortDb.sheetData, 'Espasamag Antic');
-      const long1 = buildLongRestPatch(sheetAfterShort);
-      const afterLong1Db = await updateCharacterBase(db, playerCtx, camp.id, legacyMulti.id, {
-        sheetPatch: long1.patch,
-      });
-      expect((afterLong1Db.sheetData.hitPoints as Record<string, unknown>).hitDiceUsed).toBe(2);
-      expect((afterLong1Db.sheetData.hitPoints as Record<string, unknown>).hitDiceUsedByDie).toBeNull();
+      const legacyMultiReloaded = await getCampaignCharacter(db, playerCtx, camp.id, legacyMulti.id);
+      expect((legacyMultiReloaded.sheetData.hitPoints as Record<string, unknown>).current).toBe(15);
+      expect((legacyMultiReloaded.sheetData.hitPoints as Record<string, unknown>).hitDiceUsed).toBe(3);
+      expect((legacyMultiReloaded.sheetData.hitPoints as Record<string, unknown>).hitDiceUsedByDie).toBeNull();
 
-      const sheetAfterLong1 = normalizeDnd5e2014Sheet(afterLong1Db.sheetData, 'Espasamag Antic');
-      const long2 = buildLongRestPatch(sheetAfterLong1);
-      const afterLong2Db = await updateCharacterBase(db, playerCtx, camp.id, legacyMulti.id, {
-        sheetPatch: long2.patch,
+      // També bloqueja en personatge d'una sola classe si arriba explícitament amb hitDiceUsed > 0 i hitDiceUsedByDie === null
+      const singleLegacyUnallocated = createEmptyDnd5e2014Sheet('Guerrer Antic');
+      singleLegacyUnallocated.raceAndClass.classes = [{ classId: 'fighter', level: 4 }];
+      singleLegacyUnallocated.hitPoints = {
+        max: 36,
+        current: 20,
+        temporary: 0,
+        hitDice: null,
+        hitDiceUsed: 1,
+        hitDiceUsedByDie: null,
+        deathSaves: { successes: 0, failures: 0 },
+      };
+      let singleLegacyErr: unknown;
+      try {
+        buildShortRestPatch(singleLegacyUnallocated, {
+          hitDiceToSpend: [{ dieSize: 10, count: 1, rolls: [5] }],
+        });
+      } catch (err) {
+        singleLegacyErr = err;
+      }
+      expect(singleLegacyErr).toMatchObject({ status: 400, code: 'UNALLOCATED_LEGACY_HIT_DICE' });
+      expect(singleLegacyUnallocated.hitPoints.current).toBe(20);
+
+      // 2.2 Personatge amb hitDiceUsed === 0 i hitDiceUsedByDie === null: permet gastar daus i inicialitza seguiment
+      const zeroLegacySheet = createEmptyDnd5e2014Sheet('Nou Antic');
+      zeroLegacySheet.raceAndClass.classes = [
+        { classId: 'fighter', level: 2 },
+        { classId: 'wizard', level: 1 },
+      ];
+      zeroLegacySheet.abilities = { str: 14, dex: 12, con: 14, int: 16, wis: 10, cha: 10 };
+      zeroLegacySheet.hitPoints = {
+        max: 24,
+        current: 10,
+        temporary: 0,
+        hitDice: null,
+        hitDiceUsed: 0,
+        hitDiceUsedByDie: null,
+        deathSaves: { successes: 0, failures: 0 },
+      };
+      const shortFromZero = buildShortRestPatch(zeroLegacySheet, {
+        hitDiceToSpend: [{ dieSize: 10, count: 1, rolls: [6] }],
       });
-      expect((afterLong2Db.sheetData.hitPoints as Record<string, unknown>).hitDiceUsed).toBe(0);
-      expect((afterLong2Db.sheetData.hitPoints as Record<string, unknown>).hitDiceUsedByDie).toEqual({});
+      expect(shortFromZero.patch.hitPoints).toEqual({
+        hitDiceUsed: 1,
+        hitDiceUsedByDie: { d10: 1 },
+        current: 18,
+      });
+
+      // 2.3 Un sol descans llarg sobre fitxa antiga multiclasse restableix hitDiceUsed a 0 i hitDiceUsedByDie a {},
+      // permetent tornar a gastar daus per mida en el següent descans curt
+      const longLegacyReset = buildLongRestPatch(normalizedLegacyMulti);
+      expect(longLegacyReset.patch.hitPoints).toMatchObject({
+        current: 36,
+        hitDiceUsed: 0,
+        hitDiceUsedByDie: {},
+      });
+      const afterLongDb = await updateCharacterBase(db, playerCtx, camp.id, legacyMulti.id, {
+        sheetPatch: longLegacyReset.patch,
+      });
+      expect((afterLongDb.sheetData.hitPoints as Record<string, unknown>).hitDiceUsed).toBe(0);
+      expect((afterLongDb.sheetData.hitPoints as Record<string, unknown>).hitDiceUsedByDie).toEqual({});
+
+      const sheetAfterLong = normalizeDnd5e2014Sheet(afterLongDb.sheetData, 'Espasamag Antic');
+      const shortAfterLong = buildShortRestPatch(sheetAfterLong, {
+        hitDiceToSpend: [{ dieSize: 6, count: 1, rolls: [5] }],
+      });
+      expect(shortAfterLong.patch.hitPoints).toEqual({
+        hitDiceUsed: 1,
+        hitDiceUsedByDie: { d6: 1 },
+        current: 36,
+      });
+      const afterPostLongShortDb = await updateCharacterBase(db, playerCtx, camp.id, legacyMulti.id, {
+        sheetPatch: shortAfterLong.patch,
+      });
+      expect((afterPostLongShortDb.sheetData.hitPoints as Record<string, unknown>).hitDiceUsed).toBe(1);
+      expect(
+        (afterPostLongShortDb.sheetData.hitPoints as Record<string, unknown>).hitDiceUsedByDie
+      ).toEqual({ d6: 1 });
     } finally {
       await close();
     }
