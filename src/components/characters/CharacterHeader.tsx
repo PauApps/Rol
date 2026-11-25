@@ -7,6 +7,7 @@ import {
   Footprints,
   Heart,
   Pencil,
+  Settings2,
   Shield,
   SlidersHorizontal,
   Sparkles,
@@ -33,6 +34,7 @@ interface CharacterHeaderProps {
   draftName: string;
   onChangeName: (nextName: string) => void;
   onOpenGmManage?: () => void;
+  onOpenIdentityConfig?: () => void;
 }
 
 export function CharacterHeader({
@@ -42,6 +44,7 @@ export function CharacterHeader({
   draftName,
   onChangeName,
   onOpenGmManage,
+  onOpenIdentityConfig,
 }: CharacterHeaderProps) {
   const [editingName, setEditingName] = useState(false);
   const [tempName, setTempName] = useState(draftName);
@@ -201,12 +204,20 @@ export function CharacterHeader({
             </div>
           </div>
 
-          {campaign.canManage && onOpenGmManage && (
-            <Button size="sm" variant="secondary" onClick={onOpenGmManage}>
-              <SlidersHorizontal className="h-3.5 w-3.5" />
-              Gestió GM
-            </Button>
-          )}
+          <div className="flex flex-wrap gap-2">
+            {access.canEdit && onOpenIdentityConfig && (
+              <Button size="sm" variant="secondary" onClick={onOpenIdentityConfig}>
+                <Settings2 className="h-3.5 w-3.5" />
+                Identitat i classes
+              </Button>
+            )}
+            {campaign.canManage && onOpenGmManage && (
+              <Button size="sm" variant="secondary" onClick={onOpenGmManage}>
+                <SlidersHorizontal className="h-3.5 w-3.5" />
+                Gestió GM
+              </Button>
+            )}
+          </div>
         </div>
       </div>
 

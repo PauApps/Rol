@@ -16,6 +16,7 @@ export const dnd5e2014System: GameSystemDefinition<Dnd5e2014SheetData> = {
 };
 
 export * from './catalog';
+export * from './creation-catalog';
 export * from './schema';
 export * from './dice';
 export * from './attacks';

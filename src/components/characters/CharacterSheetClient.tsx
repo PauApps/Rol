@@ -7,6 +7,7 @@ import { AlertTriangle, ArrowLeft, CheckCircle2, RotateCcw, Save } from 'lucide-
 import { Button } from '@/components/ui/Button';
 import { CharacterGmManageModal } from './CharacterGmManageModal';
 import { CharacterHeader } from './CharacterHeader';
+import { CharacterIdentityConfigModal } from './CharacterIdentityConfigModal';
 import { CharacterTabNav } from './CharacterTabNav';
 import { TabPlaceholder } from './TabPlaceholder';
 import { CombatStatsTab } from './combat/CombatStatsTab';
@@ -41,6 +42,7 @@ export function CharacterSheetClient({
   const [saveSuccess, setSaveSuccess] = useState<string | null>(null);
   const [warnings, setWarnings] = useState<string[]>([]);
   const [gmModalOpen, setGmModalOpen] = useState(false);
+  const [identityModalOpen, setIdentityModalOpen] = useState(false);
   const inFlightRef = useRef(false);
 
   const access = useMemo(
@@ -142,6 +144,7 @@ export function CharacterSheetClient({
           }))
         }
         onOpenGmManage={campaign.canManage ? () => setGmModalOpen(true) : undefined}
+        onOpenIdentityConfig={access.canEdit ? () => setIdentityModalOpen(true) : undefined}
       />
 
       {/* Barra d'estat i desament explícit */}
@@ -250,6 +253,26 @@ export function CharacterSheetClient({
           campaignId={campaign.id}
           character={character}
           onUpdated={handleGmModalUpdated}
+        />
+      )}
+
+      {/* Modal editable d'identitat, raça, classes i competències */}
+      {access.canEdit && identityModalOpen && (
+        <CharacterIdentityConfigModal
+          key={`cfg-${character.id}-${character.updatedAt}`}
+          open={identityModalOpen}
+          onClose={() => setIdentityModalOpen(false)}
+          campaignId={campaign.id}
+          character={character}
+          access={access}
+          onUpdated={(nextCharacter) => {
+            setCharacter(nextCharacter);
+            if (!builtPatch.hasChanges) {
+              setDraft(createDraftFromCharacter(nextCharacter));
+            }
+            setSaveSuccess('Configuració de personatge actualitzada.');
+            router.refresh();
+          }}
         />
       )}
     </div>

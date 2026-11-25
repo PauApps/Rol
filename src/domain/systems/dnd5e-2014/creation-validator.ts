@@ -1,10 +1,17 @@
 import {
+  ABILITY_METHOD_LABELS_CA,
   REQUIRED_FIELD_LABELS_CA,
   type CampaignCreationConfig,
   type CreationRequiredFieldKey,
 } from '@/domain/campaigns/creation-config';
-import { getClassEntry, normalizeMatchText, resolveClassId } from './catalog';
-import { calculateTotalLevel } from './rules';
+import { ABILITY_KEYS, getClassEntry, normalizeMatchText, resolveClassId } from './catalog';
+import {
+  getBackgroundEntry,
+  getRaceEntry,
+  getSubraceEntry,
+  validateAbilityScoresAgainstMethod,
+} from './creation-catalog';
+import { calculateTotalLevel, computeProgression } from './rules';
 import type { Dnd5e2014ClassEntry, Dnd5e2014SheetData } from './schema';
 
 export interface CreationValidationOptions {
@@ -26,6 +33,20 @@ function hasText(value: string | null | undefined): boolean {
 function isAllowedStringMatch(candidate: string, allowedList: string[]): boolean {
   const normalizedCandidate = normalizeMatchText(candidate);
   return allowedList.some((allowed) => normalizeMatchText(allowed) === normalizedCandidate);
+}
+
+function isAllowedRaceMatch(candidate: string, allowedRaces: string[]): boolean {
+  if (isAllowedStringMatch(candidate, allowedRaces)) return true;
+  const raceMeta = getRaceEntry(candidate);
+  if (!raceMeta) return false;
+  return allowedRaces.some((allowed) => getRaceEntry(allowed)?.id === raceMeta.id);
+}
+
+function isAllowedBackgroundMatch(candidate: string, allowedBackgrounds: string[]): boolean {
+  if (isAllowedStringMatch(candidate, allowedBackgrounds)) return true;
+  const bgMeta = getBackgroundEntry(candidate);
+  if (!bgMeta) return false;
+  return allowedBackgrounds.some((allowed) => getBackgroundEntry(allowed)?.id === bgMeta.id);
 }
 
 function isAllowedClassMatch(cls: Dnd5e2014ClassEntry, allowedClasses: string[]): boolean {
@@ -152,7 +173,7 @@ export function validateCharacterAgainstCampaignConfig(
       options.isCreation || wasSectionTouched(options.touchedPaths, 'raceAndClass.race', 'raceAndClass');
     if (checkRace && config.allowedRaces.length > 0 && hasText(sheet.raceAndClass.race)) {
       const race = sheet.raceAndClass.race!;
-      if (!isAllowedStringMatch(race, config.allowedRaces)) {
+      if (!isAllowedRaceMatch(race, config.allowedRaces)) {
         recordDeviation(
           `La raça "${race}" no es troba entre les races permeses de la campanya (${config.allowedRaces.join(', ')}).`
         );
@@ -187,7 +208,7 @@ export function validateCharacterAgainstCampaignConfig(
       hasText(sheet.background.backgroundName)
     ) {
       const bg = sheet.background.backgroundName!;
-      if (!isAllowedStringMatch(bg, config.allowedBackgrounds)) {
+      if (!isAllowedBackgroundMatch(bg, config.allowedBackgrounds)) {
         recordDeviation(
           `L’antecedent "${bg}" no es troba entre els antecedents permesos de la campanya (${config.allowedBackgrounds.join(', ')}).`
         );
@@ -199,6 +220,46 @@ export function validateCharacterAgainstCampaignConfig(
       if (computedLevel !== config.startingLevel) {
         recordDeviation(
           `El nivell inicial del personatge (${computedLevel}) ha de coincidir amb el nivell inicial de la campanya (${config.startingLevel}).`
+        );
+      }
+    }
+  }
+
+  // 3. Ability score generation method validation on creation
+  if (options.isCreation && config.abilityScoreMethod !== 'free') {
+    const anyScoreDefined = ABILITY_KEYS.some((k) => sheet.abilities[k] !== null);
+    const recordAbilityDeviation = (msg: string) => {
+      if (config.freedomMode === 'strict' && !options.isGm) {
+        violations.push(msg);
+      } else {
+        warnings.push(msg);
+      }
+    };
+
+    if (config.abilityScoreMethod === 'manual_gm') {
+      if (!options.isGm && anyScoreDefined) {
+        recordAbilityDeviation(
+          `La campanya utilitza "${ABILITY_METHOD_LABELS_CA.manual_gm}"; només el Director de Joc pot assignar característiques directament.`
+        );
+      }
+    } else if (anyScoreDefined) {
+      // Validam el mètode oficial sempre que s'aportin característiques inicials
+      // (preservant la creació mínima sense atributs en fluxos ràpids/heretats)
+      const raceMeta = getRaceEntry(sheet.raceAndClass.race);
+      const subraceMeta = getSubraceEntry(raceMeta, sheet.raceAndClass.subrace);
+      const totalLevel = calculateTotalLevel(sheet);
+      const progression = computeProgression(sheet, totalLevel);
+      const check = validateAbilityScoresAgainstMethod(
+        sheet.abilities,
+        config.abilityScoreMethod,
+        raceMeta,
+        subraceMeta,
+        progression.unlockedAsiCount
+      );
+      if (!check.valid) {
+        recordAbilityDeviation(
+          check.reason ??
+            `Les característiques no s’ajusten al mètode "${ABILITY_METHOD_LABELS_CA[config.abilityScoreMethod]}".`
         );
       }
     }

@@ -675,7 +675,18 @@ export function CampaignDetailClient({
         <Card
           title="Personatges de la campanya"
           subtitle="Tots els membres poden consultar les fitxes del grup; només el propietari autoritzat o el GM les poden editar."
-          actions={<Badge tone="gold">Fitxa D&D 5e (3C.1)</Badge>}
+          actions={
+            <div className="flex flex-wrap items-center gap-2">
+              <Badge tone="gold">Fitxa D&D 5e</Badge>
+              <Link
+                href={`/campaigns/${campaign.id}/characters/new`}
+                className="inline-flex items-center justify-center gap-1.5 rounded-[var(--rol-radius-md)] bg-[var(--rol-accent-primary)] px-3 py-1.5 text-xs font-medium text-[var(--rol-accent-primary-ink)] shadow-sm transition-colors hover:bg-[var(--rol-accent-primary-hover)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--rol-accent-gold)]"
+              >
+                <Plus className="h-3.5 w-3.5" />
+                Creació guiada (6 passos)
+              </Link>
+            </div>
+          }
         >
           <form onSubmit={handleCreateCharacter} className="mb-4 flex flex-col gap-2.5 sm:flex-row sm:items-end">
             <div className="flex-1">
